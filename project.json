@@ -1,0 +1,17 @@
+{
+    "id": "flecs.systems.sokol",
+    "type": "package",
+    "value": {
+        "author": "Sander Mertens",
+        "description": "Flecs module package",
+        "use": [
+            "flecs",
+            "flecs.components.graphics",
+            "bake.sdl2"
+        ]
+    },
+    "lang.c": {
+        "cflags": ["-fobjc-arc"],
+        "frameworks": ["Foundation", "Metal"]
+    }
+}
