@@ -6,12 +6,12 @@
         "description": "Flecs module package",
         "use": [
             "flecs",
-            "flecs.components.graphics",
+            "flecs.components.gui",
+            "flecs.components.transform",
+            "flecs.components.geometry",
+            "flecs.systems.sdl2",
+            "bake.opengl",
             "bake.sdl2"
         ]
-    },
-    "lang.c": {
-        "cflags": ["-fobjc-arc"],
-        "frameworks": ["Foundation", "Metal"]
     }
 }

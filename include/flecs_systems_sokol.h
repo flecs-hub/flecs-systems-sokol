@@ -2,27 +2,24 @@
 #define FLECS_SYSTEMS_SOKOL_H
 
 /* This generated file contains includes for project dependencies */
-#include <flecs-systems-sokol/bake_config.h>
+#include "flecs-systems-sokol/bake_config.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+/*
+typedef int MyComponent;
+*/
+
 typedef struct FlecsSystemsSokol {
-    /*
-     * ECS_DECLARE_ENTITY(MyTag);
-     * ECS_DECLARE_COMPONENT(MyComponent);
-     */
+    int32_t dummy;
 } FlecsSystemsSokol;
 
 void FlecsSystemsSokolImport(
-    ecs_world_t *world,
-    int flags);
+    ecs_world_t *world);
 
-#define FlecsSystemsSokolImportHandles(handles) /*\
-    * ECS_IMPORT_ENTITY(handles, MyTag);\
-    * ECS_IMPORT_COMPONENT(handles, MyComponent); 
-    */
+#define FlecsSystemsSokolImportHandles(handles)
 
 #ifdef __cplusplus
 }

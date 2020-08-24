@@ -19,25 +19,23 @@
 
 /* Headers of public dependencies */
 #include <flecs.h>
-#include <flecs_components_graphics.h>
+#include <flecs_components_gui.h>
+#include <flecs_components_transform.h>
+#include <flecs_components_geometry.h>
+#include <flecs_systems_sdl2.h>
 #include <bake_sdl2.h>
 
-/* Headers of private dependencies */
-#ifdef FLECS_SYSTEMS_SOKOL_IMPL
-/* No dependencies */
-#endif
-
 /* Convenience macro for exporting symbols */
-#ifndef FLECS_SYSTEMS_SOKOL_STATIC
-  #if FLECS_SYSTEMS_SOKOL_IMPL && (defined(_MSC_VER) || defined(__MINGW32__))
-    #define FLECS_SYSTEMS_SOKOL_EXPORT __declspec(dllexport)
-  #elif FLECS_SYSTEMS_SOKOL_IMPL
-    #define FLECS_SYSTEMS_SOKOL_EXPORT __attribute__((__visibility__("default")))
-  #elif defined _MSC_VER
-    #define FLECS_SYSTEMS_SOKOL_EXPORT __declspec(dllimport)
-  #else
-    #define FLECS_SYSTEMS_SOKOL_EXPORT
-  #endif
+#ifndef flecs_systems_sokol_STATIC
+#if flecs_systems_sokol_EXPORTS && (defined(_MSC_VER) || defined(__MINGW32__))
+  #define FLECS_SYSTEMS_SOKOL_EXPORT __declspec(dllexport)
+#elif flecs_systems_sokol_EXPORTS
+  #define FLECS_SYSTEMS_SOKOL_EXPORT __attribute__((__visibility__("default")))
+#elif defined _MSC_VER
+  #define FLECS_SYSTEMS_SOKOL_EXPORT __declspec(dllimport)
+#else
+  #define FLECS_SYSTEMS_SOKOL_EXPORT
+#endif
 #else
   #define FLECS_SYSTEMS_SOKOL_EXPORT
 #endif
