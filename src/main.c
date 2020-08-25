@@ -10,11 +10,6 @@
 #define SOKOL_GLCORE33
 #include <flecs-systems-sokol/sokol_gfx.h>
 
-typedef struct sokol_vert3_t {
-    ecs_vert3_t pos;
-    ecs_rgba_t color;
-} sokol_vert3_t;
-
 typedef struct SokolCanvas {
     SDL_Window* sdl_window;
     SDL_GLContext gl_context;
@@ -23,27 +18,152 @@ typedef struct SokolCanvas {
 } SokolCanvas;
 
 typedef struct SokolBuffer {
-    sg_buffer buffer;
-    sg_buffer index_buffer;
-    void *vertices;
-    uint16_t *indices;
-    int32_t count;
+    /* GPU buffers */
+    sg_buffer vertex_buffer;        /* Geometry (static) */
+    sg_buffer index_buffer;         /* Indices (static) */
+    sg_buffer color_buffer;         /* Color (per instance) */
+    sg_buffer transform_buffer;     /* Transform (per instance) */
+
+    /* Application-cached buffers */
+    ecs_rgba_t *colors;
+    mat4 *transforms;
+
+    /* Number of instances */
+    int32_t instance_count;
+
+    /* Number of indices */
     int32_t index_count;
 } SokolBuffer;
 
 ECS_CTOR(SokolBuffer, ptr, {
-    ptr->buffer = (sg_buffer){ 0 };
+    ptr->vertex_buffer = (sg_buffer){ 0 };
     ptr->index_buffer = (sg_buffer){ 0 };
-    ptr->vertices = NULL;
-    ptr->indices = NULL;
-    ptr->count = 0;
+    ptr->color_buffer = (sg_buffer){ 0 };
+    ptr->transform_buffer = (sg_buffer){ 0 };
+
+    ptr->colors = NULL;
+    ptr->transforms = NULL;
+
+    ptr->instance_count = 0;
     ptr->index_count = 0;
 });
 
 ECS_DTOR(SokolBuffer, ptr, {
-    ecs_os_free(ptr->vertices);
-    ecs_os_free(ptr->indices);
+    ecs_os_free(ptr->colors);
+    ecs_os_free(ptr->transforms);
 });
+
+static
+sg_pass_action init_pass_action(
+    const EcsCanvas *canvas) 
+{
+    ecs_rgb_t bg_color = canvas->background_color;
+
+    return (sg_pass_action) {
+        .colors[0] = {
+            .action = SG_ACTION_CLEAR, 
+            .val = {
+                bg_color.r,
+                bg_color.g,
+                bg_color.b,
+                1.0f 
+            }
+        } 
+    };
+}
+
+static
+sg_pipeline init_pipeline(void) {
+/* create a shader (use vertex attribute locations) */
+    sg_shader shd = sg_make_shader(&(sg_shader_desc){
+        .vs.source =
+            "#version 330\n"
+            "layout(location=0) in vec4 position;\n"
+            "layout(location=1) in vec4 color0;\n"
+            "layout(location=2) in mat4 mat;\n"
+            "out vec4 color;\n"
+            "void main() {\n"
+            "  gl_Position = mat * position;\n"
+            "  color = color0;\n"
+            "}\n",
+        .fs.source =
+            "#version 330\n"
+            "in vec4 color;\n"
+            "out vec4 frag_color;\n"
+            "void main() {\n"
+            "  frag_color = color;\n"
+            "}\n"
+    });
+
+    /* create a pipeline object (default render state is fine) */
+    return sg_make_pipeline(&(sg_pipeline_desc){
+        .shader = shd,
+        .index_type = SG_INDEXTYPE_UINT16,
+        .layout = {
+            .buffers = {
+                [1] = { .stride = 16, .step_func=SG_VERTEXSTEP_PER_INSTANCE },
+                [2] = { .stride = 64, .step_func=SG_VERTEXSTEP_PER_INSTANCE }
+            },
+
+            .attrs = {
+                /* Static geometry */
+                [0] = {.offset=0,  .format=SG_VERTEXFORMAT_FLOAT3 },
+
+                /* Color buffer (per instance) */
+                [1] = { .buffer_index=1,  .offset=0, .format=SG_VERTEXFORMAT_FLOAT4 },
+
+                /* Matrix (per instance) */
+                [2] = { .buffer_index=2,  .offset=0,  .format=SG_VERTEXFORMAT_FLOAT4 },
+                [3] = { .buffer_index=2,  .offset=16, .format=SG_VERTEXFORMAT_FLOAT4 },
+                [4] = { .buffer_index=2,  .offset=32, .format=SG_VERTEXFORMAT_FLOAT4 },
+                [5] = { .buffer_index=2,  .offset=48, .format=SG_VERTEXFORMAT_FLOAT4 }
+            }
+        }
+    });
+}
+
+static
+void init_buffers(
+    ecs_world_t *world) 
+{
+    ecs_entity_t rect_buf = ecs_lookup_fullpath(
+        world, "flecs.systems.sokol.RectangleBuffer");
+    ecs_assert(rect_buf != 0, ECS_INTERNAL_ERROR, NULL);
+
+    ecs_entity_t sokol_buffer = ecs_lookup_fullpath(
+        world, "flecs.systems.sokol.Buffer");
+    ecs_assert(sokol_buffer != 0, ECS_INTERNAL_ERROR, NULL);
+
+    SokolBuffer *b = ecs_get_mut_w_entity(world, rect_buf, sokol_buffer, NULL);
+    ecs_assert(b != NULL, ECS_INTERNAL_ERROR, NULL);
+
+    vec3 vertices[] = {
+        {-0.5, -0.5, 0.0},
+        { 0.5, -0.5, 0.0},
+        { 0.5,  0.5, 0.0},
+        {-0.5,  0.5, 0.0}
+    };
+
+    uint16_t indices[] = {
+        0, 1, 2,
+        0, 2, 3
+    };
+
+    b->vertex_buffer = sg_make_buffer(&(sg_buffer_desc){
+        .size = sizeof(vertices),
+        .content = vertices,
+        .usage = SG_USAGE_IMMUTABLE
+    });
+
+    b->index_buffer = sg_make_buffer(&(sg_buffer_desc){
+        .size = sizeof(indices),
+        .content = indices,
+        .type = SG_BUFFERTYPE_INDEXBUFFER,
+        .usage = SG_USAGE_IMMUTABLE
+    });
+
+    b->index_count = 6;
+}
 
 static
 void SokolSetCanvas(ecs_iter_t *it) {
@@ -54,69 +174,24 @@ void SokolSetCanvas(ecs_iter_t *it) {
 
     for (int32_t i = 0; i < it->count; i ++) {
         SDL_Window *sdl_window = window->window;
-        ecs_rgb_t bg_color = canvas[i].background_color;
 
         SDL_GLContext ctx = SDL_GL_CreateContext(sdl_window);
 
         sg_setup(&(sg_desc) {0});
         assert(sg_isvalid());
 
-        /* create a shader (use vertex attribute locations) */
-        sg_shader shd = sg_make_shader(&(sg_shader_desc){
-            .vs.source =
-                "#version 330\n"
-                "layout(location=0) in vec4 position;\n"
-                "layout(location=1) in vec4 color0;\n"
-                "out vec4 color;\n"
-                "void main() {\n"
-                "  gl_Position = position;\n"
-                "  color = color0;\n"
-                "}\n",
-            .fs.source =
-                "#version 330\n"
-                "in vec4 color;\n"
-                "out vec4 frag_color;\n"
-                "void main() {\n"
-                "  frag_color = color;\n"
-                "}\n"
-        });
-    
-        /* create a pipeline object (default render state is fine) */
-        sg_pipeline pip = sg_make_pipeline(&(sg_pipeline_desc){
-            .shader = shd,
-            .index_type = SG_INDEXTYPE_UINT16,
-            .layout = {
-                /* test to provide attr offsets, but no buffer stride, this should compute the stride */
-                .attrs = {
-                    /* vertex attrs can also be bound by location instead of name (but not in GLES2) */
-                    [0] = { .offset=0, .format=SG_VERTEXFORMAT_FLOAT3 },
-                    [1] = { .offset=12, .format=SG_VERTEXFORMAT_FLOAT4 }
-                }
-            }
-        });
-
-        sg_pass_action pass_action = (sg_pass_action) {
-            .colors[0] = {
-                .action = SG_ACTION_CLEAR, 
-                .val = {
-                    bg_color.r,
-                    bg_color.g,
-                    bg_color.b,
-                    1.0f 
-                }
-            } 
-        };
-
         ecs_set(world, it->entities[i], SokolCanvas, {
             .sdl_window = sdl_window,
             .gl_context = ctx,
-            .pass_action = pass_action,
-            .pip = pip
+            .pass_action = init_pass_action(&canvas[i]),
+            .pip = init_pipeline()
         });
 
         ecs_set(world, it->entities[i], EcsQuery, {
             ecs_query_new(world, "[in] flecs.systems.sokol.Buffer")
-        });        
+        });
+
+        init_buffers(world);
 
         ecs_trace_1("sokol initialized");
 	}
@@ -130,6 +205,85 @@ void SokolUnsetCanvas(ecs_iter_t *it) {
     for (i = 0; i < it->count; i ++) {
         sg_shutdown();
         SDL_GL_DeleteContext(canvas[i].gl_context);
+    }
+}
+
+static
+void SokolAttachRect(ecs_iter_t *it) {
+    EcsQuery *q = ecs_column(it, EcsQuery, 1);
+    ecs_query_t *query = q->query;
+
+    if (ecs_query_changed(query)) {
+        SokolBuffer *b = ecs_column(it, SokolBuffer, 2);
+        ecs_iter_t qit = ecs_query_iter(query);
+        
+        int32_t count = 0;
+        while (ecs_query_next(&qit)) {
+            count += qit.count;
+        }
+
+        if (!count) {
+            if (!b->instance_count) {
+                /* Nothing to be done */
+            }
+        } else {
+            ecs_rgba_t *colors = b->colors;
+            mat4 *transforms = b->transforms;
+            int32_t instance_count = b->instance_count;
+            bool is_new = false;
+
+            if (!colors && !transforms) {
+                is_new = true;
+            }
+
+            int colors_size = count * sizeof(ecs_rgba_t);
+            int transforms_size = count * sizeof(EcsTransform3);
+
+            if (instance_count < count) {
+                colors = ecs_os_realloc(colors, colors_size);
+                transforms = ecs_os_realloc(transforms, transforms_size);
+            }
+
+            int32_t cursor = 0;
+
+            ecs_iter_t qit = ecs_query_iter(query);
+            while (ecs_query_next(&qit)) {
+                EcsPosition3 *p = ecs_column(&qit, EcsPosition3, 1);
+                EcsRectangle *r = ecs_column(&qit, EcsRectangle, 2);
+                EcsColor *c = ecs_column(&qit, EcsColor, 3);
+                EcsTransform3 *t = ecs_column(&qit, EcsTransform3, 4);
+
+                memcpy(&colors[cursor], c, qit.count * sizeof(ecs_rgba_t));
+                memcpy(&transforms[cursor], t, qit.count * sizeof(mat4));
+
+                int i;
+                for (i = 0; i < qit.count; i ++) {
+                    vec3 scale = {r[i].width, r[i].height, 1.0};
+                    glm_scale(transforms[cursor + i], scale);
+                }
+
+                cursor += qit.count;
+            }
+
+            b->colors = colors;
+            b->transforms = transforms;
+            b->instance_count = count;
+
+            if (is_new) {
+                b->color_buffer = sg_make_buffer(&(sg_buffer_desc){
+                    .size = colors_size,
+                    .usage = SG_USAGE_STREAM
+                });
+
+                b->transform_buffer = sg_make_buffer(&(sg_buffer_desc){
+                    .size = transforms_size,
+                    .usage = SG_USAGE_STREAM
+                });
+            }
+
+            sg_update_buffer(b->color_buffer, colors, colors_size);
+            sg_update_buffer(b->transform_buffer, transforms, transforms_size);
+        }
     }
 }
 
@@ -149,126 +303,29 @@ void SokolRender(ecs_iter_t *it) {
         ecs_iter_t qit = ecs_query_iter(buffers);
         while (ecs_query_next(&qit)) {
             SokolBuffer *buffer = ecs_column(&qit, SokolBuffer, 1);
+            if (!buffer->instance_count) {
+                 continue;
+            }
 
             int b;
             for (b = 0; b < qit.count; b ++) {
                 sg_bindings bind = {
-                    .vertex_buffers[0] = buffer[b].buffer,
+                    .vertex_buffers = {
+                        [0] = buffer[b].vertex_buffer,
+                        [1] = buffer[b].color_buffer,
+                        [2] = buffer[b].transform_buffer
+                    },
                     .index_buffer = buffer[b].index_buffer
                 };
 
                 sg_apply_bindings(&bind);
-                sg_draw(0, buffer->index_count, 1);
+                sg_draw(0, buffer->index_count, buffer->instance_count);
             }
         }
 
         sg_end_pass();
         sg_commit();
         SDL_GL_SwapWindow(canvas->sdl_window);
-    }
-}
-
-static
-void SokolAttachRect(ecs_iter_t *it) {
-    EcsQuery *q = ecs_column(it, EcsQuery, 1);
-    ecs_query_t *query = q->query;
-
-    if (ecs_query_changed(query)) {
-        SokolBuffer *b = ecs_column(it, SokolBuffer, 2);
-        ecs_iter_t qit = ecs_query_iter(query);
-        
-        int32_t count = 0;
-        while (ecs_query_next(&qit)) {
-            count += qit.count;
-        }
-
-        if (!count) {
-            if (!b->count) {
-                /* Nothing to be done */
-            }
-        } else {
-            sokol_vert3_t *vertices = b->vertices;
-            uint16_t *indices = b->indices;
-            int32_t vertices_count = b->count;
-            bool is_new = false;
-
-            if (!vertices) {
-                is_new = true;
-            }
-
-            int size = count * sizeof(sokol_vert3_t) * 4;
-            int index_size = count * 6 * sizeof(uint16_t);
-
-            if (vertices_count < count) {
-                vertices = ecs_os_realloc(vertices, size);
-                indices = ecs_os_realloc(indices, index_size);
-            }
-
-            int32_t vi = 0, ii = 0;
-
-            ecs_iter_t qit = ecs_query_iter(query);
-            while (ecs_query_next(&qit)) {
-                EcsPosition3 *p = ecs_column(&qit, EcsPosition3, 1);
-                EcsRectangle *r = ecs_column(&qit, EcsRectangle, 2);
-
-                int i;
-                for (i = 0; i < qit.count; i ++) {
-                    float x = p[i].x;
-                    float y = p[i].y;
-                    float w = r[i].width / 2.0;
-                    float h = r[i].height / 2.0;
-
-                    vertices[vi ++] = (sokol_vert3_t){
-                        .pos = {x - w, y - h, 0},
-                        .color = {1.0, 0.5, 0.5, 1.0}
-                    };
-
-                    vertices[vi ++] = (sokol_vert3_t){
-                        .pos = {x + w, y - h, 0},
-                        .color = {0.5, 1.0, 0.5, 1.0}
-                    };
-
-                    vertices[vi ++] = (sokol_vert3_t){
-                        .pos = {x + w, y + h, 0},
-                        .color = {0.5, 0.5, 1.0, 1.0}
-                    };
-
-                    vertices[vi ++] = (sokol_vert3_t){
-                        .pos = {x - w, y + h, 0},
-                        .color = {0.5, 1.0, 1.0, 1.0}
-                    };
-
-                    indices[ii ++] = 0;
-                    indices[ii ++] = 1;
-                    indices[ii ++] = 2;
-
-                    indices[ii ++] = 0;
-                    indices[ii ++] = 2;
-                    indices[ii ++] = 3;          
-                }
-            }
-
-            b->vertices = vertices;
-            b->indices = indices;
-            b->count = count;
-            b->index_count = count * 6;
-
-            if (is_new) {
-                b->buffer = sg_make_buffer(&(sg_buffer_desc){
-                    .size = size,
-                    .content = vertices,
-                });
-
-                b->index_buffer = sg_make_buffer(&(sg_buffer_desc){
-                    .size = index_size,
-                    .content = indices,
-                    .type = SG_BUFFERTYPE_INDEXBUFFER
-                });
-            } else {
-                sg_update_buffer(b->buffer, vertices, size);
-                sg_update_buffer(b->index_buffer, indices, index_size);
-            }
-        }
     }
 }
 
@@ -306,12 +363,16 @@ void FlecsSystemsSokolImport(
     ECS_ENTITY(world, SokolRectangleBuffer, 
         Buffer, flecs.system.Query);
 
+        /* Create query for rectangles */
         ecs_set(world, SokolRectangleBuffer, EcsQuery, {
             ecs_query_new(world, 
                 "[in] flecs.components.transform.Position3,"
-                "[in] flecs.components.geometry.Rectangle")
+                "[in] flecs.components.geometry.Rectangle,"
+                "[in] flecs.components.geometry.Color,"
+                "[in] flecs.components.transform.Transform3")
         });
 
+    /* Create system that manages buffers for rectangles */
     ECS_SYSTEM(world, SokolAttachRect, EcsPostLoad, 
         RectangleBuffer:flecs.system.Query, 
         RectangleBuffer:Buffer);
