@@ -10,6 +10,10 @@
 #define SOKOL_GLCORE33
 #include <flecs-systems-sokol/sokol_gfx.h>
 
+typedef struct uniforms_t {
+    mat4 mat_vp;
+} uniforms_t;
+
 typedef struct SokolCanvas {
     SDL_Window* sdl_window;
     SDL_GLContext gl_context;
@@ -74,16 +78,23 @@ sg_pass_action init_pass_action(
 
 static
 sg_pipeline init_pipeline(void) {
-/* create a shader (use vertex attribute locations) */
+    /* create an instancing shader */
     sg_shader shd = sg_make_shader(&(sg_shader_desc){
+        .vs.uniform_blocks[0] = {
+            .size = sizeof(uniforms_t),
+            .uniforms = {
+                [0] = { .name="mat_vp", .type=SG_UNIFORMTYPE_MAT4 }
+            }
+        },        
         .vs.source =
             "#version 330\n"
+            "uniform mat4 mat_vp;\n"
             "layout(location=0) in vec4 position;\n"
             "layout(location=1) in vec4 color0;\n"
-            "layout(location=2) in mat4 mat;\n"
+            "layout(location=2) in mat4 mat_m;\n"
             "out vec4 color;\n"
             "void main() {\n"
-            "  gl_Position = mat * position;\n"
+            "  gl_Position = mat_vp * mat_m * position;\n"
             "  color = color0;\n"
             "}\n",
         .fs.source =
@@ -118,6 +129,10 @@ sg_pipeline init_pipeline(void) {
                 [4] = { .buffer_index=2,  .offset=32, .format=SG_VERTEXFORMAT_FLOAT4 },
                 [5] = { .buffer_index=2,  .offset=48, .format=SG_VERTEXFORMAT_FLOAT4 }
             }
+        },
+        .depth_stencil = {
+            .depth_compare_func = SG_COMPAREFUNC_LESS_EQUAL,
+            .depth_write_enabled = true
         }
     });
 }
@@ -194,7 +209,7 @@ void SokolSetCanvas(ecs_iter_t *it) {
         init_buffers(world);
 
         ecs_trace_1("sokol initialized");
-	}
+    }
 }
 
 static
@@ -217,15 +232,14 @@ void SokolAttachRect(ecs_iter_t *it) {
         SokolBuffer *b = ecs_column(it, SokolBuffer, 2);
         ecs_iter_t qit = ecs_query_iter(query);
         
+        /* First count number of instances */
         int32_t count = 0;
         while (ecs_query_next(&qit)) {
             count += qit.count;
         }
 
         if (!count) {
-            if (!b->instance_count) {
-                /* Nothing to be done */
-            }
+            b->instance_count = 0;
         } else {
             ecs_rgba_t *colors = b->colors;
             mat4 *transforms = b->transforms;
@@ -248,10 +262,9 @@ void SokolAttachRect(ecs_iter_t *it) {
 
             ecs_iter_t qit = ecs_query_iter(query);
             while (ecs_query_next(&qit)) {
-                EcsPosition3 *p = ecs_column(&qit, EcsPosition3, 1);
-                EcsRectangle *r = ecs_column(&qit, EcsRectangle, 2);
-                EcsColor *c = ecs_column(&qit, EcsColor, 3);
-                EcsTransform3 *t = ecs_column(&qit, EcsTransform3, 4);
+                EcsRectangle *r = ecs_column(&qit, EcsRectangle, 1);
+                EcsColor *c = ecs_column(&qit, EcsColor, 2);
+                EcsTransform3 *t = ecs_column(&qit, EcsTransform3, 3);
 
                 memcpy(&colors[cursor], c, qit.count * sizeof(ecs_rgba_t));
                 memcpy(&transforms[cursor], t, qit.count * sizeof(mat4));
@@ -289,16 +302,42 @@ void SokolAttachRect(ecs_iter_t *it) {
 
 static
 void SokolRender(ecs_iter_t *it) {
-    SokolCanvas *canvas = ecs_column(it, SokolCanvas, 1);
-    EcsQuery *q = ecs_column(it, EcsQuery, 2);
+    SokolCanvas *sk_canvas = ecs_column(it, SokolCanvas, 1);
+    EcsCanvas *canvas = ecs_column(it, EcsCanvas, 2);
+    EcsQuery *q = ecs_column(it, EcsQuery, 3);
+    ecs_entity_t ecs_entity(EcsCamera) = ecs_column_entity(it, 4);
+
     ecs_query_t *buffers = q->query;
+    uniforms_t u;
+    mat4 mat_p;
+    mat4 mat_v;
+
+    /* Default values */
+    vec3 eye = {0, -4.0, 0.0};
+    vec3 center = {0, 0.0, 5.0};
+    vec3 up = {0.0, 1.0, 0.0};
 
     int32_t i;
     for (i = 0; i < it->count; i ++) {
         int w, h;
-        SDL_GL_GetDrawableSize(canvas->sdl_window, &w, &h);
-        sg_begin_default_pass(&canvas->pass_action, w, h);
-        sg_apply_pipeline(canvas->pip);
+        SDL_GL_GetDrawableSize(sk_canvas->sdl_window, &w, &h);
+        float aspect = (float)w / (float)h;
+
+        ecs_entity_t camera = canvas->camera;
+        if (camera) {
+            EcsCamera *cam = ecs_get_mut(it->world, camera, EcsCamera, NULL);
+            ecs_assert(cam != NULL, ECS_INTERNAL_ERROR, NULL);
+            glm_perspective(cam->fov, aspect, 0.1, 1000.0, mat_p);
+            glm_lookat(cam->position, cam->lookat, cam->up, mat_v);
+        } else {
+            glm_perspective(30, aspect, 0.1, 100.0, mat_p);
+            glm_lookat(eye, center, up, mat_v);
+        }
+
+        glm_mat4_mul(mat_p, mat_v, u.mat_vp);        
+
+        sg_begin_default_pass(&sk_canvas->pass_action, w, h);
+        sg_apply_pipeline(sk_canvas->pip);
 
         ecs_iter_t qit = ecs_query_iter(buffers);
         while (ecs_query_next(&qit)) {
@@ -319,13 +358,15 @@ void SokolRender(ecs_iter_t *it) {
                 };
 
                 sg_apply_bindings(&bind);
+                sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &u, sizeof(uniforms_t));
+
                 sg_draw(0, buffer->index_count, buffer->instance_count);
             }
         }
 
         sg_end_pass();
         sg_commit();
-        SDL_GL_SwapWindow(canvas->sdl_window);
+        SDL_GL_SwapWindow(sk_canvas->sdl_window);
     }
 }
 
@@ -355,10 +396,13 @@ void FlecsSystemsSokolImport(
         :Canvas);
 
     ECS_SYSTEM(world, SokolUnsetCanvas, EcsUnSet, 
-        Canvas);        
+        Canvas);
 
     ECS_SYSTEM(world, SokolRender, EcsOnStore, 
-        Canvas, flecs.system.Query);
+        Canvas, 
+        flecs.components.gui.Canvas, 
+        flecs.system.Query,
+        :flecs.components.gui.Camera);
 
     ECS_ENTITY(world, SokolRectangleBuffer, 
         Buffer, flecs.system.Query);
@@ -366,10 +410,9 @@ void FlecsSystemsSokolImport(
         /* Create query for rectangles */
         ecs_set(world, SokolRectangleBuffer, EcsQuery, {
             ecs_query_new(world, 
-                "[in] flecs.components.transform.Position3,"
                 "[in] flecs.components.geometry.Rectangle,"
                 "[in] flecs.components.geometry.Color,"
-                "[in] flecs.components.transform.Transform3")
+                "[in] flecs.components.transform.Transform3,")
         });
 
     /* Create system that manages buffers for rectangles */
