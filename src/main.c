@@ -138,7 +138,7 @@ sg_pipeline init_pipeline(void) {
 }
 
 static
-void init_buffers(
+void init_rect_buffers(
     ecs_world_t *world) 
 {
     ecs_entity_t rect_buf = ecs_lookup_fullpath(
@@ -178,6 +178,79 @@ void init_buffers(
     });
 
     b->index_count = 6;
+}
+
+static
+void init_box_buffers(
+    ecs_world_t *world) 
+{
+    ecs_entity_t box_buf = ecs_lookup_fullpath(
+        world, "flecs.systems.sokol.BoxBuffer");
+    ecs_assert(box_buf != 0, ECS_INTERNAL_ERROR, NULL);
+
+    ecs_entity_t sokol_buffer = ecs_lookup_fullpath(
+        world, "flecs.systems.sokol.Buffer");
+    ecs_assert(sokol_buffer != 0, ECS_INTERNAL_ERROR, NULL);
+
+    SokolBuffer *b = ecs_get_mut_w_entity(world, box_buf, sokol_buffer, NULL);
+    ecs_assert(b != NULL, ECS_INTERNAL_ERROR, NULL);
+
+    vec3 vertices[] = {
+        {-0.5, -0.5, 0.5},
+        { 0.5, -0.5, 0.5},
+
+        { 0.5,  0.5, 0.5},
+        {-0.5,  0.5, 0.5},
+
+        { 0.5, -0.5, -0.5},
+        { 0.5,  0.5, -0.5},
+
+        {-0.5, -0.5, -0.5},
+        {-0.5,  0.5, -0.5}
+    };
+
+    uint16_t indices[] = {
+        /* Front */
+        0, 1, 2,    0, 2, 3,
+
+        /* Right */
+        1, 4, 5,    1, 5, 2,
+
+        /* Left */
+        0, 6, 7,    0, 7, 1,
+
+        /* Back */
+        6, 4, 5,    6, 5, 7,
+
+        /* Top */
+        0, 6, 4,    0, 4, 2,
+
+        /* Bottom */
+        5, 7, 3,    5, 3, 2
+    };
+
+    b->vertex_buffer = sg_make_buffer(&(sg_buffer_desc){
+        .size = sizeof(vertices),
+        .content = vertices,
+        .usage = SG_USAGE_IMMUTABLE
+    });
+
+    b->index_buffer = sg_make_buffer(&(sg_buffer_desc){
+        .size = sizeof(indices),
+        .content = indices,
+        .type = SG_BUFFERTYPE_INDEXBUFFER,
+        .usage = SG_USAGE_IMMUTABLE
+    });
+
+    b->index_count = 36;
+}
+
+static
+void init_buffers(
+    ecs_world_t *world) 
+{
+    init_rect_buffers(world);
+    init_box_buffers(world);
 }
 
 static
@@ -224,7 +297,13 @@ void SokolUnsetCanvas(ecs_iter_t *it) {
 }
 
 static
-void SokolAttachRect(ecs_iter_t *it) {
+void attach_buffer(
+    ecs_iter_t *it, 
+    void(*action)(
+        ecs_iter_t* q, 
+        int32_t offset, 
+        mat4 *transforms)) 
+{
     EcsQuery *q = ecs_column(it, EcsQuery, 1);
     ecs_query_t *query = q->query;
 
@@ -262,18 +341,13 @@ void SokolAttachRect(ecs_iter_t *it) {
 
             ecs_iter_t qit = ecs_query_iter(query);
             while (ecs_query_next(&qit)) {
-                EcsRectangle *r = ecs_column(&qit, EcsRectangle, 1);
                 EcsColor *c = ecs_column(&qit, EcsColor, 2);
                 EcsTransform3 *t = ecs_column(&qit, EcsTransform3, 3);
 
                 memcpy(&colors[cursor], c, qit.count * sizeof(ecs_rgba_t));
                 memcpy(&transforms[cursor], t, qit.count * sizeof(mat4));
 
-                int i;
-                for (i = 0; i < qit.count; i ++) {
-                    vec3 scale = {r[i].width, r[i].height, 1.0};
-                    glm_scale(transforms[cursor + i], scale);
-                }
+                action(&qit, cursor, transforms);
 
                 cursor += qit.count;
             }
@@ -298,6 +372,38 @@ void SokolAttachRect(ecs_iter_t *it) {
             sg_update_buffer(b->transform_buffer, transforms, transforms_size);
         }
     }
+}
+
+static
+void attach_rect(ecs_iter_t *qit, int32_t offset, mat4 *transforms) {
+    EcsRectangle *r = ecs_column(qit, EcsRectangle, 1);
+
+    int i;
+    for (i = 0; i < qit->count; i ++) {
+        vec3 scale = {r[i].width, r[i].height, 1.0};
+        glm_scale(transforms[offset + i], scale);
+    }
+}
+
+static
+void SokolAttachRect(ecs_iter_t *it) {
+    attach_buffer(it, attach_rect);
+}
+
+static
+void attach_box(ecs_iter_t *qit, int32_t offset, mat4 *transforms) {
+    EcsBox *b = ecs_column(qit, EcsBox, 1);
+    
+    int i;
+    for (i = 0; i < qit->count; i ++) {
+        vec3 scale = {b[i].width, b[i].height, b[i].depth};
+        glm_scale(transforms[offset + i], scale);
+    }
+}
+
+static
+void SokolAttachBox(ecs_iter_t *it) {
+    attach_buffer(it, attach_box);
 }
 
 static
@@ -342,12 +448,12 @@ void SokolRender(ecs_iter_t *it) {
         ecs_iter_t qit = ecs_query_iter(buffers);
         while (ecs_query_next(&qit)) {
             SokolBuffer *buffer = ecs_column(&qit, SokolBuffer, 1);
-            if (!buffer->instance_count) {
-                 continue;
-            }
-
+            
             int b;
             for (b = 0; b < qit.count; b ++) {
+                if (!buffer[b].instance_count) {
+                    continue;
+                }
                 sg_bindings bind = {
                     .vertex_buffers = {
                         [0] = buffer[b].vertex_buffer,
@@ -360,7 +466,7 @@ void SokolRender(ecs_iter_t *it) {
                 sg_apply_bindings(&bind);
                 sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &u, sizeof(uniforms_t));
 
-                sg_draw(0, buffer->index_count, buffer->instance_count);
+                sg_draw(0, buffer[b].index_count, buffer[b].instance_count);
             }
         }
 
@@ -404,7 +510,10 @@ void FlecsSystemsSokolImport(
         flecs.system.Query,
         :flecs.components.gui.Camera);
 
-    ECS_ENTITY(world, SokolRectangleBuffer, 
+    
+    /* Support for rectangle primitive */
+
+    ECS_ENTITY(world, SokolRectangleBuffer,
         Buffer, flecs.system.Query);
 
         /* Create query for rectangles */
@@ -419,4 +528,22 @@ void FlecsSystemsSokolImport(
     ECS_SYSTEM(world, SokolAttachRect, EcsPostLoad, 
         RectangleBuffer:flecs.system.Query, 
         RectangleBuffer:Buffer);
+
+    /* Support for box primitive */
+
+    ECS_ENTITY(world, SokolBoxBuffer,
+        Buffer, flecs.system.Query);
+
+        /* Create query for boxes */
+        ecs_set(world, SokolBoxBuffer, EcsQuery, {
+            ecs_query_new(world, 
+                "[in] flecs.components.geometry.Box,"
+                "[in] flecs.components.geometry.Color,"
+                "[in] flecs.components.transform.Transform3,")
+        });        
+
+    /* Create system that manages buffers for rectangles */
+    ECS_SYSTEM(world, SokolAttachBox, EcsPostLoad, 
+        BoxBuffer:flecs.system.Query, 
+        BoxBuffer:Buffer);        
 }
