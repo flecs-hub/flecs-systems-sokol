@@ -107,6 +107,7 @@ void SokolSetCanvas(ecs_iter_t *it) {
 
         sg_setup(&(sg_desc) {0});
         assert(sg_isvalid());
+        ecs_trace_1("sokol initialized");
 
         ecs_set(world, it->entities[i], SokolCanvas, {
             .sdl_window = sdl_window,
@@ -115,13 +116,15 @@ void SokolSetCanvas(ecs_iter_t *it) {
             .pip = init_pipeline()
         });
 
+        ecs_trace_1("sokol canvas initialized");
+
         ecs_set(world, it->entities[i], EcsQuery, {
             ecs_query_new(world, "[in] flecs.systems.sokol.Buffer")
         });
 
         sokol_init_buffers(world);
 
-        ecs_trace_1("sokol initialized");
+        ecs_trace_1("sokol buffer support initialized");
     }
 }
 
@@ -159,6 +162,7 @@ void SokolRender(ecs_iter_t *it) {
         SDL_GL_GetDrawableSize(sk_canvas->sdl_window, &w, &h);
         float aspect = (float)w / (float)h;
 
+        /* Compute perspective & lookat matrix */
         ecs_entity_t camera = canvas->camera;
         if (camera) {
             EcsCamera *cam = ecs_get_mut(it->world, camera, EcsCamera, NULL);
@@ -170,6 +174,7 @@ void SokolRender(ecs_iter_t *it) {
             glm_lookat(eye, center, up, mat_v);
         }
 
+        /* Compute view/projection matrix */
         glm_mat4_mul(mat_p, mat_v, u.mat_vp);        
 
         sg_begin_default_pass(&sk_canvas->pass_action, w, h);
@@ -201,6 +206,7 @@ void SokolRender(ecs_iter_t *it) {
         }
 
         sg_end_pass();
+
         sg_commit();
         SDL_GL_SwapWindow(sk_canvas->sdl_window);
     }

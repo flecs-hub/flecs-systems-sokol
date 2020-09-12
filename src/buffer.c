@@ -176,13 +176,21 @@ void attach_buffer(
             }
 
             int32_t cursor = 0;
+            int i;
 
             ecs_iter_t qit = ecs_query_iter(query);
             while (ecs_query_next(&qit)) {
                 EcsColor *c = ecs_column(&qit, EcsColor, 2);
                 EcsTransform3 *t = ecs_column(&qit, EcsTransform3, 3);
 
-                memcpy(&colors[cursor], c, qit.count * sizeof(ecs_rgba_t));
+                if (ecs_is_owned(&qit, 2)) {
+                    memcpy(&colors[cursor], c, qit.count * sizeof(ecs_rgba_t));
+                } else {
+                    for (i = 0; i < qit.count; i ++) {
+                        memcpy(&colors[cursor + i], c, sizeof(ecs_rgba_t));
+                    }
+                }
+
                 memcpy(&transforms[cursor], t, qit.count * sizeof(mat4));
 
                 action(&qit, cursor, transforms);
@@ -217,9 +225,16 @@ void attach_rect(ecs_iter_t *qit, int32_t offset, mat4 *transforms) {
     EcsRectangle *r = ecs_column(qit, EcsRectangle, 1);
 
     int i;
-    for (i = 0; i < qit->count; i ++) {
-        vec3 scale = {r[i].width, r[i].height, 1.0};
-        glm_scale(transforms[offset + i], scale);
+    if (ecs_is_owned(qit, 1)) {    
+        for (i = 0; i < qit->count; i ++) {
+            vec3 scale = {r[i].width, r[i].height, 1.0};
+            glm_scale(transforms[offset + i], scale);
+        }
+    } else {
+        vec3 scale = {r->width, r->height, 1.0};
+        for (i = 0; i < qit->count; i ++) {
+            glm_scale(transforms[offset + i], scale);
+        }
     }
 }
 
@@ -228,9 +243,16 @@ void attach_box(ecs_iter_t *qit, int32_t offset, mat4 *transforms) {
     EcsBox *b = ecs_column(qit, EcsBox, 1);
     
     int i;
-    for (i = 0; i < qit->count; i ++) {
-        vec3 scale = {b[i].width, b[i].height, b[i].depth};
-        glm_scale(transforms[offset + i], scale);
+    if (ecs_is_owned(qit, 1)) {
+        for (i = 0; i < qit->count; i ++) {
+            vec3 scale = {b[i].width, b[i].height, b[i].depth};
+            glm_scale(transforms[offset + i], scale);
+        }
+    } else {
+        vec3 scale = {b->width, b->height, b->depth};
+        for (i = 0; i < qit->count; i ++) {
+            glm_scale(transforms[offset + i], scale);
+        }
     }
 }
 
@@ -291,8 +313,8 @@ void FlecsSystemsSokolBufferImport(
         /* Create query for boxes */
         ecs_set(world, SokolBoxBuffer, EcsQuery, {
             ecs_query_new(world, 
-                "[in] flecs.components.geometry.Box,"
-                "[in] flecs.components.geometry.Color,"
+                "[in] ANY:flecs.components.geometry.Box,"
+                "[in] ANY:flecs.components.geometry.Color,"
                 "[in] flecs.components.transform.Transform3,")
         });        
 

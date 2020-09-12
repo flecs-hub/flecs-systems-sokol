@@ -25,4 +25,23 @@ void FlecsSystemsSokolImport(
 }
 #endif
 
+#ifdef __cplusplus
+
+namespace flecs {
+namespace systems {
+
+class sokol : FlecsSystemsSokol {
+public:
+    sokol(flecs::world& ecs) {
+        FlecsSystemsSokolImport(ecs.c_ptr());
+
+        ecs.module<flecs::systems::sokol>();
+    }
+};
+
+}
+}
+
+#endif
+
 #endif
