@@ -13,6 +13,9 @@ typedef struct SokolBuffer {
     /* Number of instances */
     int32_t instance_count;
 
+    /* Max number of instances allowed in current buffer */
+    int32_t instance_max;
+
     /* Number of indices */
     int32_t index_count;
 } SokolBuffer;

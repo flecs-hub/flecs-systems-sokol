@@ -10,6 +10,7 @@ ECS_CTOR(SokolBuffer, ptr, {
     ptr->transforms = NULL;
 
     ptr->instance_count = 0;
+    ptr->instance_max = 0;
     ptr->index_count = 0;
 });
 
@@ -161,11 +162,7 @@ void attach_buffer(
             ecs_rgba_t *colors = b->colors;
             mat4 *transforms = b->transforms;
             int32_t instance_count = b->instance_count;
-            bool is_new = false;
-
-            if (!colors && !transforms) {
-                is_new = true;
-            }
+            int32_t instance_max = b->instance_max;
 
             int colors_size = count * sizeof(ecs_rgba_t);
             int transforms_size = count * sizeof(EcsTransform3);
@@ -202,16 +199,34 @@ void attach_buffer(
             b->transforms = transforms;
             b->instance_count = count;
 
-            if (is_new) {
+            if (count > instance_max) {
+                if (instance_max) {
+                    /* Make sure buffers are no longer in use (I think- without
+                     * this OpenGL complains) */
+                    sg_reset_state_cache();
+                    
+                    sg_destroy_buffer(b->color_buffer);
+                    sg_destroy_buffer(b->transform_buffer);
+                }
+
+                while (count > instance_max) {
+                    if (!instance_max) {
+                        instance_max = 1;
+                    }
+                    instance_max *= 2;
+                }
+
                 b->color_buffer = sg_make_buffer(&(sg_buffer_desc){
-                    .size = colors_size,
+                    .size = instance_max * sizeof(ecs_rgba_t),
                     .usage = SG_USAGE_STREAM
                 });
 
                 b->transform_buffer = sg_make_buffer(&(sg_buffer_desc){
-                    .size = transforms_size,
+                    .size = instance_max * sizeof(EcsTransform3),
                     .usage = SG_USAGE_STREAM
                 });
+
+                b->instance_max = instance_max;
             }
 
             sg_update_buffer(b->color_buffer, colors, colors_size);
