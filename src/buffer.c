@@ -20,6 +20,26 @@ ECS_DTOR(SokolBuffer, ptr, {
 });
 
 static
+void compute_flat_normals(
+    vec3 *vertices,
+    uint16_t *indices,
+    int32_t count,
+    vec3 *normals_out)
+{
+    int32_t v;
+    for (v = 0; v < count; v += 3) {
+        vec3 vec1, vec2, normal;
+        glm_vec3_sub(vertices[indices[v + 0]], vertices[indices[v + 1]], vec1);
+        glm_vec3_sub(vertices[indices[v + 0]], vertices[indices[v + 2]], vec2);
+        glm_vec3_crossn(vec2, vec1, normal);
+        
+        glm_vec3_copy(normal, normals_out[indices[v + 0]]);
+        glm_vec3_copy(normal, normals_out[indices[v + 1]]);
+        glm_vec3_copy(normal, normals_out[indices[v + 2]]);
+    }
+}
+
+static
 void init_rect_buffers(
     ecs_world_t *world) 
 {
@@ -46,9 +66,18 @@ void init_rect_buffers(
         0, 2, 3
     };
 
+    vec3 normals[6];
+    compute_flat_normals(vertices, indices, 6, normals);
+
     b->vertex_buffer = sg_make_buffer(&(sg_buffer_desc){
         .size = sizeof(vertices),
         .content = vertices,
+        .usage = SG_USAGE_IMMUTABLE
+    });
+
+    b->normal_buffer = sg_make_buffer(&(sg_buffer_desc){
+        .size = sizeof(normals),
+        .content = normals,
         .usage = SG_USAGE_IMMUTABLE
     });
 
@@ -78,37 +107,35 @@ void init_box_buffers(
     ecs_assert(b != NULL, ECS_INTERNAL_ERROR, NULL);
 
     vec3 vertices[] = {
-        {-0.5, -0.5, -0.5},
-        { 0.5, -0.5, -0.5},
+        {-0.5f, -0.5f, -0.5f}, // Back   
+        { 0.5f, -0.5f, -0.5f},    
+        { 0.5f,  0.5f, -0.5f},    
+        {-0.5f,  0.5f, -0.5f},  
 
-        { 0.5,  0.5, -0.5},
-        {-0.5,  0.5, -0.5},
+        {-0.5f, -0.5f,  0.5f}, // Front  
+        { 0.5f, -0.5f,  0.5f},    
+        { 0.5f,  0.5f,  0.5f},    
+        {-0.5f,  0.5f,  0.5f}, 
 
-        { 0.5, -0.5, 0.5},
-        { 0.5,  0.5, 0.5},
+        {-0.5f, -0.5f, -0.5f}, // Left   
+        {-0.5f,  0.5f, -0.5f},    
+        {-0.5f,  0.5f,  0.5f},    
+        {-0.5f, -0.5f,  0.5f},    
 
-        {-0.5, -0.5, 0.5},
-        {-0.5,  0.5, 0.5},
-    };
+        { 0.5f, -0.5f, -0.5f}, // Right   
+        { 0.5f,  0.5f, -0.5f},    
+        { 0.5f,  0.5f,  0.5f},    
+        { 0.5f, -0.5f,  0.5f},    
 
-    uint16_t indices[] = {
-        /* Front */
-        0, 1, 2,    0, 2, 3,
+        {-0.5f, -0.5f, -0.5f}, // Bottom   
+        {-0.5f, -0.5f,  0.5f},    
+        { 0.5f, -0.5f,  0.5f},    
+        { 0.5f, -0.5f, -0.5f},    
 
-        /* Right */
-        1, 4, 5,   1, 5, 2,
-
-        /* Left */  
-        3, 7, 6,    3, 6, 0,
-
-        /* Back */
-        4, 6, 7,    4, 7, 5,
-
-        /* Top */
-        6, 4, 1,    6, 1, 0,
-
-        /* Bottom */
-        5, 7, 3,    5, 3, 2
+        {-0.5f,  0.5f, -0.5f}, // Top   
+        {-0.5f,  0.5f,  0.5f},    
+        { 0.5f,  0.5f,  0.5f},    
+        { 0.5f,  0.5f, -0.5f},    
     };
 
     b->vertex_buffer = sg_make_buffer(&(sg_buffer_desc){
@@ -117,10 +144,28 @@ void init_box_buffers(
         .usage = SG_USAGE_IMMUTABLE
     });
 
+    uint16_t indices[] = {
+        0,  1,  2,   0,  2,  3,
+        6,  5,  4,   7,  6,  4,
+        8,  9,  10,  8,  10, 11,
+        14, 13, 12,  15, 14, 12,
+        16, 17, 18,  16, 18, 19,
+        22, 21, 20,  23, 22, 20,
+    };
+
     b->index_buffer = sg_make_buffer(&(sg_buffer_desc){
         .size = sizeof(indices),
         .content = indices,
         .type = SG_BUFFERTYPE_INDEXBUFFER,
+        .usage = SG_USAGE_IMMUTABLE
+    });    
+
+    vec3 normals[24];
+    compute_flat_normals(vertices, indices, 36, normals);
+
+    b->normal_buffer = sg_make_buffer(&(sg_buffer_desc){
+        .size = sizeof(normals),
+        .content = normals,
         .usage = SG_USAGE_IMMUTABLE
     });
 
@@ -292,6 +337,7 @@ void FlecsSystemsSokolBufferImport(
 
     ECS_IMPORT(world, FlecsComponentsTransform);
     ECS_IMPORT(world, FlecsComponentsGeometry);
+    ECS_IMPORT(world, FlecsSystemsTransform);
 
     ecs_set_name_prefix(world, "Sokol");
 

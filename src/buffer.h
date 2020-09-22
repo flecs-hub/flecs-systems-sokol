@@ -2,6 +2,7 @@
 typedef struct SokolBuffer {
     /* GPU buffers */
     sg_buffer vertex_buffer;        /* Geometry (static) */
+    sg_buffer normal_buffer;        /* Normals (static) */
     sg_buffer index_buffer;         /* Indices (static) */
     sg_buffer color_buffer;         /* Color (per instance) */
     sg_buffer transform_buffer;     /* Transform (per instance) */

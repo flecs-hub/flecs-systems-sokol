@@ -22,6 +22,7 @@
 #include <flecs_components_gui.h>
 #include <flecs_components_transform.h>
 #include <flecs_components_geometry.h>
+#include <flecs_systems_transform.h>
 #include <flecs_systems_sdl2.h>
 #include <bake_sdl2.h>
 

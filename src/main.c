@@ -1,9 +1,16 @@
 #define SOKOL_IMPL
 #include "private_include.h"
 
-typedef struct uniforms_t {
+typedef struct vs_uniforms_t {
     mat4 mat_vp;
-} uniforms_t;
+} vs_uniforms_t;
+
+typedef struct fs_uniforms_t {
+    vec3 light_ambient;
+    vec3 light_direction;
+    vec3 light_color;
+    vec3 eye_pos;
+} fs_uniforms_t;
 
 typedef struct SokolCanvas {
     SDL_Window* sdl_window;
@@ -36,28 +43,53 @@ sg_pipeline init_pipeline(void) {
     /* create an instancing shader */
     sg_shader shd = sg_make_shader(&(sg_shader_desc){
         .vs.uniform_blocks[0] = {
-            .size = sizeof(uniforms_t),
+            .size = sizeof(vs_uniforms_t),
             .uniforms = {
-                [0] = { .name="mat_vp", .type=SG_UNIFORMTYPE_MAT4 }
+                [0] = { .name="u_mat_vp", .type=SG_UNIFORMTYPE_MAT4 }
             }
-        },        
+        }, 
+        .fs.uniform_blocks[0] = {
+            .size = sizeof(fs_uniforms_t),
+            .uniforms = {
+                [0] = { .name="u_light_ambient", .type=SG_UNIFORMTYPE_FLOAT3 },
+                [1] = { .name="u_light_direction", .type=SG_UNIFORMTYPE_FLOAT3 },
+                [2] = { .name="u_light_color", .type=SG_UNIFORMTYPE_FLOAT3 },
+                [3] = { .name="u_eye_pos", .type=SG_UNIFORMTYPE_FLOAT3 }
+            }
+        },            
         .vs.source =
             "#version 330\n"
-            "uniform mat4 mat_vp;\n"
-            "layout(location=0) in vec4 position;\n"
-            "layout(location=1) in vec4 color0;\n"
-            "layout(location=2) in mat4 mat_m;\n"
+            "uniform mat4 u_mat_vp;\n"
+            "layout(location=0) in vec4 v_position;\n"
+            "layout(location=1) in vec3 v_normal;\n"
+            "layout(location=2) in vec4 i_color;\n"
+            "layout(location=3) in mat4 i_mat_m;\n"
+            "out vec4 position;\n"
+            "out vec3 normal;\n"
             "out vec4 color;\n"
             "void main() {\n"
-            "  gl_Position = mat_vp * mat_m * position;\n"
-            "  color = color0;\n"
+            "  gl_Position = u_mat_vp * i_mat_m * v_position;\n"
+            "  position = (i_mat_m * v_position);\n"
+            "  normal = (i_mat_m * vec4(v_normal, 0.0)).xyz;\n"
+            "  color = i_color;\n"
             "}\n",
         .fs.source =
             "#version 330\n"
+            "uniform vec3 u_light_ambient;\n"
+            "uniform vec3 u_light_direction;\n"
+            "uniform vec3 u_light_color;\n"
+            "uniform vec3 u_eye_pos;\n"
+            "in vec4 position;\n"
+            "in vec3 normal;\n"
             "in vec4 color;\n"
             "out vec4 frag_color;\n"
             "void main() {\n"
-            "  frag_color = color;\n"
+            "  vec3 l = normalize(u_light_direction);\n"
+            "  vec3 n = normalize(normal);\n"
+            "  float dot_n_l = dot(n, l);\n"
+            "  vec4 ambient = vec4(u_light_ambient, 0) * color;\n"
+            "  vec4 diffuse = vec4(u_light_color, 0) * color * dot_n_l;\n"
+            "  frag_color = ambient + diffuse;\n"
             "}\n"
     });
 
@@ -67,22 +99,23 @@ sg_pipeline init_pipeline(void) {
         .index_type = SG_INDEXTYPE_UINT16,
         .layout = {
             .buffers = {
-                [1] = { .stride = 16, .step_func=SG_VERTEXSTEP_PER_INSTANCE },
-                [2] = { .stride = 64, .step_func=SG_VERTEXSTEP_PER_INSTANCE }
+                [2] = { .stride = 16, .step_func=SG_VERTEXSTEP_PER_INSTANCE },
+                [3] = { .stride = 64, .step_func=SG_VERTEXSTEP_PER_INSTANCE }
             },
 
             .attrs = {
                 /* Static geometry */
-                [0] = {.offset=0,  .format=SG_VERTEXFORMAT_FLOAT3 },
+                [0] = { .buffer_index=0, .offset=0,  .format=SG_VERTEXFORMAT_FLOAT3 },
+                [1] = { .buffer_index=1, .offset=0,  .format=SG_VERTEXFORMAT_FLOAT3 },
 
                 /* Color buffer (per instance) */
-                [1] = { .buffer_index=1,  .offset=0, .format=SG_VERTEXFORMAT_FLOAT4 },
+                [2] = { .buffer_index=2, .offset=0, .format=SG_VERTEXFORMAT_FLOAT4 },
 
                 /* Matrix (per instance) */
-                [2] = { .buffer_index=2,  .offset=0,  .format=SG_VERTEXFORMAT_FLOAT4 },
-                [3] = { .buffer_index=2,  .offset=16, .format=SG_VERTEXFORMAT_FLOAT4 },
-                [4] = { .buffer_index=2,  .offset=32, .format=SG_VERTEXFORMAT_FLOAT4 },
-                [5] = { .buffer_index=2,  .offset=48, .format=SG_VERTEXFORMAT_FLOAT4 }
+                [3] = { .buffer_index=3, .offset=0,  .format=SG_VERTEXFORMAT_FLOAT4 },
+                [4] = { .buffer_index=3, .offset=16, .format=SG_VERTEXFORMAT_FLOAT4 },
+                [5] = { .buffer_index=3, .offset=32, .format=SG_VERTEXFORMAT_FLOAT4 },
+                [6] = { .buffer_index=3, .offset=48, .format=SG_VERTEXFORMAT_FLOAT4 }
             }
         },
         .depth_stencil = {
@@ -140,46 +173,86 @@ void SokolUnsetCanvas(ecs_iter_t *it) {
 }
 
 static
-void SokolRender(ecs_iter_t *it) {
-    SokolCanvas *sk_canvas = ecs_column(it, SokolCanvas, 1);
-    EcsCanvas *canvas = ecs_column(it, EcsCanvas, 2);
-    EcsQuery *q = ecs_column(it, EcsQuery, 3);
-    ecs_entity_t ecs_entity(EcsCamera) = ecs_column_entity(it, 4);
-
-    ecs_query_t *buffers = q->query;
-    uniforms_t u;
-    mat4 mat_p;
-    mat4 mat_v;
-
-    /* Default values */
+void init_uniforms(
+    ecs_world_t *world,
+    EcsCanvas *canvas,
+    float aspect,
+    vs_uniforms_t *vs_out,
+    fs_uniforms_t *fs_out,
+    ecs_entity_t ecs_entity(EcsCamera),
+    ecs_entity_t ecs_entity(EcsDirectionalLight))
+{
     vec3 eye = {0, -4.0, 0.0};
     vec3 center = {0, 0.0, 5.0};
     vec3 up = {0.0, 1.0, 0.0};
 
+    mat4 mat_p;
+    mat4 mat_v;
+
+    /* Compute perspective & lookat matrix */
+    ecs_entity_t camera = canvas->camera;
+    if (camera) {
+        /* Cast away const since glm doesn't do const */
+        EcsCamera *cam = (EcsCamera*)
+            ecs_get(world, camera, EcsCamera);
+        ecs_assert(cam != NULL, ECS_INVALID_PARAMETER, NULL);
+
+        glm_perspective(cam->fov, aspect, 0.5, 100.0, mat_p);
+        glm_lookat(cam->position, cam->lookat, cam->up, mat_v);
+    } else {
+        glm_perspective(30, aspect, 0.5, 100.0, mat_p);
+        glm_lookat(eye, center, up, mat_v);
+    }
+
+    /* Compute view/projection matrix */
+    glm_mat4_mul(mat_p, mat_v, vs_out->mat_vp);
+
+    /* Get light parameters */
+    ecs_entity_t light = canvas->directional_light;
+    if (light) {
+        /* Cast away const since glm doesn't do const */
+        EcsDirectionalLight *l = (EcsDirectionalLight*)
+            ecs_get(world, light, EcsDirectionalLight);
+        ecs_assert(l != NULL, ECS_INVALID_PARAMETER, NULL);
+
+        glm_vec3_copy(l->direction, fs_out->light_direction);
+        glm_vec3_copy(l->color, fs_out->light_color);
+    } else {
+        glm_vec3_zero(fs_out->light_direction);
+        glm_vec3_zero(fs_out->light_color);
+    }
+
+    glm_vec3_copy((float*)&canvas->ambient_light, fs_out->light_ambient);
+    glm_vec3_copy(eye, fs_out->eye_pos);
+}
+
+static
+void SokolRender(ecs_iter_t *it) {
+    ecs_world_t *world = it->world;
+    SokolCanvas *sk_canvas = ecs_column(it, SokolCanvas, 1);
+    EcsCanvas *canvas = ecs_column(it, EcsCanvas, 2);
+    EcsQuery *q = ecs_column(it, EcsQuery, 3);
+    ecs_entity_t ecs_entity(EcsCamera) = ecs_column_entity(it, 4);
+    ecs_entity_t ecs_entity(EcsDirectionalLight) = ecs_column_entity(it, 5);
+
+    ecs_query_t *buffers = q->query;
+    vs_uniforms_t vs_u;
+    fs_uniforms_t fs_u;
+
+    /* Loop each canvas */
     int32_t i;
     for (i = 0; i < it->count; i ++) {
         int w, h;
-        SDL_GL_GetDrawableSize(sk_canvas->sdl_window, &w, &h);
+        SDL_GL_GetDrawableSize(sk_canvas[i].sdl_window, &w, &h);
         float aspect = (float)w / (float)h;
 
-        /* Compute perspective & lookat matrix */
-        ecs_entity_t camera = canvas->camera;
-        if (camera) {
-            EcsCamera *cam = ecs_get_mut(it->world, camera, EcsCamera, NULL);
-            ecs_assert(cam != NULL, ECS_INTERNAL_ERROR, NULL);
-            glm_perspective(cam->fov, aspect, 0.1, 1000.0, mat_p);
-            glm_lookat(cam->position, cam->lookat, cam->up, mat_v);
-        } else {
-            glm_perspective(30, aspect, 0.1, 100.0, mat_p);
-            glm_lookat(eye, center, up, mat_v);
-        }
-
-        /* Compute view/projection matrix */
-        glm_mat4_mul(mat_p, mat_v, u.mat_vp);        
+        init_uniforms(world, &canvas[i], aspect, &vs_u, &fs_u,
+            ecs_entity(EcsCamera), ecs_entity(EcsDirectionalLight));
 
         sg_begin_default_pass(&sk_canvas->pass_action, w, h);
         sg_apply_pipeline(sk_canvas->pip);
 
+        /* Loop buffers */
         ecs_iter_t qit = ecs_query_iter(buffers);
         while (ecs_query_next(&qit)) {
             SokolBuffer *buffer = ecs_column(&qit, SokolBuffer, 1);
@@ -192,14 +265,16 @@ void SokolRender(ecs_iter_t *it) {
                 sg_bindings bind = {
                     .vertex_buffers = {
                         [0] = buffer[b].vertex_buffer,
-                        [1] = buffer[b].color_buffer,
-                        [2] = buffer[b].transform_buffer
+                        [1] = buffer[b].normal_buffer,
+                        [2] = buffer[b].color_buffer,
+                        [3] = buffer[b].transform_buffer
                     },
                     .index_buffer = buffer[b].index_buffer
                 };
 
                 sg_apply_bindings(&bind);
-                sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &u, sizeof(uniforms_t));
+                sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &vs_u, sizeof(vs_uniforms_t));
+                sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &fs_u, sizeof(fs_uniforms_t));
 
                 sg_draw(0, buffer[b].index_count, buffer[b].instance_count);
             }
@@ -237,5 +312,6 @@ void FlecsSystemsSokolImport(
         Canvas, 
         flecs.components.gui.Canvas, 
         flecs.system.Query,
-        :flecs.components.gui.Camera);     
+        :flecs.components.graphics.Camera,
+        :flecs.components.graphics.DirectionalLight);
 }
