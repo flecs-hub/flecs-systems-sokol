@@ -222,10 +222,10 @@ void attach_buffer(
 
             ecs_iter_t qit = ecs_query_iter(query);
             while (ecs_query_next(&qit)) {
-                EcsColor *c = ecs_column(&qit, EcsColor, 2);
-                EcsTransform3 *t = ecs_column(&qit, EcsTransform3, 3);
+                EcsTransform3 *t = ecs_column(&qit, EcsTransform3, 1);
+                EcsColor *c = ecs_column(&qit, EcsColor, 3);
 
-                if (ecs_is_owned(&qit, 2)) {
+                if (ecs_is_owned(&qit, 3)) {
                     memcpy(&colors[cursor], c, qit.count * sizeof(ecs_rgba_t));
                 } else {
                     for (i = 0; i < qit.count; i ++) {
@@ -234,9 +234,7 @@ void attach_buffer(
                 }
 
                 memcpy(&transforms[cursor], t, qit.count * sizeof(mat4));
-
                 action(&qit, cursor, transforms);
-
                 cursor += qit.count;
             }
 
@@ -282,10 +280,10 @@ void attach_buffer(
 
 static
 void attach_rect(ecs_iter_t *qit, int32_t offset, mat4 *transforms) {
-    EcsRectangle *r = ecs_column(qit, EcsRectangle, 1);
+    EcsRectangle *r = ecs_column(qit, EcsRectangle, 2);
 
     int i;
-    if (ecs_is_owned(qit, 1)) {    
+    if (ecs_is_owned(qit, 2)) {
         for (i = 0; i < qit->count; i ++) {
             vec3 scale = {r[i].width, r[i].height, 1.0};
             glm_scale(transforms[offset + i], scale);
@@ -300,10 +298,10 @@ void attach_rect(ecs_iter_t *qit, int32_t offset, mat4 *transforms) {
 
 static
 void attach_box(ecs_iter_t *qit, int32_t offset, mat4 *transforms) {
-    EcsBox *b = ecs_column(qit, EcsBox, 1);
+    EcsBox *b = ecs_column(qit, EcsBox, 2);
     
     int i;
-    if (ecs_is_owned(qit, 1)) {
+    if (ecs_is_owned(qit, 2)) {
         for (i = 0; i < qit->count; i ++) {
             vec3 scale = {b[i].width, b[i].height, b[i].depth};
             glm_scale(transforms[offset + i], scale);
@@ -356,9 +354,9 @@ void FlecsSystemsSokolBufferImport(
         /* Create query for rectangles */
         ecs_set(world, SokolRectangleBuffer, EcsQuery, {
             ecs_query_new(world, 
-                "[in] flecs.components.geometry.Rectangle,"
-                "[in] flecs.components.geometry.Color,"
-                "[in] flecs.components.transform.Transform3,")
+                "[in]          flecs.components.transform.Transform3,"
+                "[in] ANY:     flecs.components.geometry.Rectangle,"
+                "[in] ANY:     flecs.components.graphics.Color")
         });
 
     /* Create system that manages buffers for rectangles */
@@ -374,9 +372,9 @@ void FlecsSystemsSokolBufferImport(
         /* Create query for boxes */
         ecs_set(world, SokolBoxBuffer, EcsQuery, {
             ecs_query_new(world, 
-                "[in] ANY:flecs.components.geometry.Box,"
-                "[in] ANY:flecs.components.geometry.Color,"
-                "[in] flecs.components.transform.Transform3,")
+                "[in]          flecs.components.transform.Transform3,"
+                "[in] ANY:     flecs.components.geometry.Box,"
+                "[in] ANY:     flecs.components.graphics.Color")
         });        
 
     /* Create system that manages buffers for rectangles */

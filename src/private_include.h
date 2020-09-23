@@ -10,3 +10,8 @@
 #include <flecs-systems-sokol/sokol_gfx.h>
 
 #include "buffer.h"
+
+/* Material id */
+typedef struct SokolMaterial {
+    uint16_t material_id;
+} SokolMaterial;

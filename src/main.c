@@ -1,6 +1,8 @@
 #define SOKOL_IMPL
 #include "private_include.h"
 
+#define FS_MAX_MATERIALS (255)
+
 typedef struct vs_uniforms_t {
     mat4 mat_vp;
 } vs_uniforms_t;
@@ -11,6 +13,16 @@ typedef struct fs_uniforms_t {
     vec3 light_color;
     vec3 eye_pos;
 } fs_uniforms_t;
+
+typedef struct fs_material_t {
+    float specular_power;
+    float shininess;
+    float emissive;
+} fs_material_t;
+
+typedef struct fs_materials_t {
+    fs_material_t materials[FS_MAX_MATERIALS];
+} fs_materials_t;
 
 typedef struct SokolCanvas {
     SDL_Window* sdl_window;
@@ -47,16 +59,24 @@ sg_pipeline init_pipeline(void) {
             .uniforms = {
                 [0] = { .name="u_mat_vp", .type=SG_UNIFORMTYPE_MAT4 }
             }
-        }, 
-        .fs.uniform_blocks[0] = {
-            .size = sizeof(fs_uniforms_t),
-            .uniforms = {
-                [0] = { .name="u_light_ambient", .type=SG_UNIFORMTYPE_FLOAT3 },
-                [1] = { .name="u_light_direction", .type=SG_UNIFORMTYPE_FLOAT3 },
-                [2] = { .name="u_light_color", .type=SG_UNIFORMTYPE_FLOAT3 },
-                [3] = { .name="u_eye_pos", .type=SG_UNIFORMTYPE_FLOAT3 }
+        },
+        .fs.uniform_blocks = {
+            [0] = {
+                .size = sizeof(fs_materials_t),
+                .uniforms = {
+                    [0] = { .name="u_materials", .type=SG_UNIFORMTYPE_FLOAT3, .array_count=FS_MAX_MATERIALS}
+                }
+            },
+            [1] = {
+                .size = sizeof(fs_uniforms_t),
+                .uniforms = {
+                    [0] = { .name="u_light_ambient", .type=SG_UNIFORMTYPE_FLOAT3 },
+                    [1] = { .name="u_light_direction", .type=SG_UNIFORMTYPE_FLOAT3 },
+                    [2] = { .name="u_light_color", .type=SG_UNIFORMTYPE_FLOAT3 },
+                    [3] = { .name="u_eye_pos", .type=SG_UNIFORMTYPE_FLOAT3 }
+                }
             }
-        },            
+        },
         .vs.source =
             "#version 330\n"
             "uniform mat4 u_mat_vp;\n"
@@ -67,6 +87,7 @@ sg_pipeline init_pipeline(void) {
             "out vec4 position;\n"
             "out vec3 normal;\n"
             "out vec4 color;\n"
+            "out vec4 material;\n"
             "void main() {\n"
             "  gl_Position = u_mat_vp * i_mat_m * v_position;\n"
             "  position = (i_mat_m * v_position);\n"
@@ -84,12 +105,22 @@ sg_pipeline init_pipeline(void) {
             "in vec4 color;\n"
             "out vec4 frag_color;\n"
             "void main() {\n"
+            "  float specular_power = 1.5;\n"
+            "  float shininess = 256;\n"
+            "  vec4 ambient = vec4(u_light_ambient, 0);\n"
             "  vec3 l = normalize(u_light_direction);\n"
             "  vec3 n = normalize(normal);\n"
             "  float dot_n_l = dot(n, l);\n"
-            "  vec4 ambient = vec4(u_light_ambient, 0) * color;\n"
-            "  vec4 diffuse = vec4(u_light_color, 0) * color * dot_n_l;\n"
-            "  frag_color = ambient + diffuse;\n"
+            "  if (dot_n_l >= 0.0) {"
+            "    vec3 v = normalize(u_eye_pos - position.xyz);\n"
+            "    vec3 r = reflect(-l, n);\n"
+            "    float r_dot_v = max(dot(r, v), 0.0);\n"
+            "    vec4 specular = vec4(specular_power * pow(r_dot_v, shininess) * dot_n_l * u_light_color, 0);\n"
+            "    vec4 diffuse = vec4(u_light_color, 0) * dot_n_l;\n"
+            "    frag_color = color * (ambient + diffuse) + specular;\n"
+            "  } else {\n"
+            "    frag_color = ambient * color;\n"
+            "  }\n"
             "}\n"
     });
 
@@ -127,52 +158,6 @@ sg_pipeline init_pipeline(void) {
 }
 
 static
-void SokolSetCanvas(ecs_iter_t *it) {
-    ecs_world_t *world = it->world;
-    Sdl2Window *window = ecs_column(it, Sdl2Window, 1);
-    EcsCanvas *canvas = ecs_column(it, EcsCanvas, 2);
-    ecs_entity_t ecs_entity(SokolCanvas) = ecs_column_entity(it, 3);
-
-    for (int32_t i = 0; i < it->count; i ++) {
-        SDL_Window *sdl_window = window->window;
-
-        SDL_GLContext ctx = SDL_GL_CreateContext(sdl_window);
-
-        sg_setup(&(sg_desc) {0});
-        assert(sg_isvalid());
-        ecs_trace_1("sokol initialized");
-
-        ecs_set(world, it->entities[i], SokolCanvas, {
-            .sdl_window = sdl_window,
-            .gl_context = ctx,
-            .pass_action = init_pass_action(&canvas[i]),
-            .pip = init_pipeline()
-        });
-
-        ecs_trace_1("sokol canvas initialized");
-
-        ecs_set(world, it->entities[i], EcsQuery, {
-            ecs_query_new(world, "[in] flecs.systems.sokol.Buffer")
-        });
-
-        sokol_init_buffers(world);
-
-        ecs_trace_1("sokol buffer support initialized");
-    }
-}
-
-static
-void SokolUnsetCanvas(ecs_iter_t *it) {
-    SokolCanvas *canvas = ecs_column(it, SokolCanvas, 1);
-
-    int32_t i;
-    for (i = 0; i < it->count; i ++) {
-        sg_shutdown();
-        SDL_GL_DeleteContext(canvas[i].gl_context);
-    }
-}
-
-static
 void init_uniforms(
     ecs_world_t *world,
     EcsCanvas *canvas,
@@ -199,9 +184,11 @@ void init_uniforms(
 
         glm_perspective(cam->fov, aspect, 0.5, 100.0, mat_p);
         glm_lookat(cam->position, cam->lookat, cam->up, mat_v);
+        glm_vec3_copy(cam->position, fs_out->eye_pos);
     } else {
         glm_perspective(30, aspect, 0.5, 100.0, mat_p);
         glm_lookat(eye, center, up, mat_v);
+        glm_vec3_copy(eye, fs_out->eye_pos);
     }
 
     /* Compute view/projection matrix */
@@ -223,7 +210,74 @@ void init_uniforms(
     }
 
     glm_vec3_copy((float*)&canvas->ambient_light, fs_out->light_ambient);
-    glm_vec3_copy(eye, fs_out->eye_pos);
+}
+
+static
+void SokolSetCanvas(ecs_iter_t *it) {
+    ecs_world_t *world = it->world;
+    Sdl2Window *window = ecs_column(it, Sdl2Window, 1);
+    EcsCanvas *canvas = ecs_column(it, EcsCanvas, 2);
+    ecs_entity_t ecs_entity(SokolCanvas) = ecs_column_entity(it, 3);
+    ecs_entity_t ecs_entity(SokolBuffer) = ecs_column_entity(it, 4);
+    ecs_entity_t ecs_entity(SokolMaterial) = ecs_column_entity(it, 5);
+
+    for (int32_t i = 0; i < it->count; i ++) {
+        SDL_Window *sdl_window = window->window;
+
+        SDL_GLContext ctx = SDL_GL_CreateContext(sdl_window);
+
+        sg_setup(&(sg_desc) {0});
+        assert(sg_isvalid());
+        ecs_trace_1("sokol initialized");
+
+        ecs_set(world, it->entities[i], SokolCanvas, {
+            .sdl_window = sdl_window,
+            .gl_context = ctx,
+            .pass_action = init_pass_action(&canvas[i]),
+            .pip = init_pipeline()
+        });
+
+        ecs_trace_1("sokol canvas initialized");
+
+        ecs_set_trait(world, it->entities[i], SokolBuffer, EcsQuery, {
+            ecs_query_new(world, "[in] flecs.systems.sokol.Buffer")
+        });
+
+        ecs_set_trait(world, it->entities[i], SokolMaterial, EcsQuery, {
+            ecs_query_new(world, "[in] flecs.systems.sokol.Material")
+        });
+
+        sokol_init_buffers(world);
+
+        ecs_trace_1("sokol buffer support initialized");
+    }
+}
+
+static
+void SokolUnsetCanvas(ecs_iter_t *it) {
+    SokolCanvas *canvas = ecs_column(it, SokolCanvas, 1);
+
+    int32_t i;
+    for (i = 0; i < it->count; i ++) {
+        sg_shutdown();
+        SDL_GL_DeleteContext(canvas[i].gl_context);
+    }
+}
+
+static
+void SokolRegisterMaterial(ecs_iter_t *it) {
+    ecs_entity_t ecs_entity(SokolMaterial) = ecs_column_entity(it, 1);
+
+    static uint16_t next_material = 0;
+
+    int i;
+    for (i = 0; i < it->count; i ++) {
+        ecs_set(it->world, it->entities[i], SokolMaterial, {
+            next_material ++
+        });
+    }
+
+    ecs_assert(next_material < FS_MAX_MATERIALS, ECS_INVALID_PARAMETER, NULL);
 }
 
 static
@@ -231,11 +285,12 @@ void SokolRender(ecs_iter_t *it) {
     ecs_world_t *world = it->world;
     SokolCanvas *sk_canvas = ecs_column(it, SokolCanvas, 1);
     EcsCanvas *canvas = ecs_column(it, EcsCanvas, 2);
-    EcsQuery *q = ecs_column(it, EcsQuery, 3);
-    ecs_entity_t ecs_entity(EcsCamera) = ecs_column_entity(it, 4);
-    ecs_entity_t ecs_entity(EcsDirectionalLight) = ecs_column_entity(it, 5);
+    EcsQuery *q_buffers = ecs_column(it, EcsQuery, 3);
+    EcsQuery *q_mats = ecs_column(it, EcsQuery, 4);
+    ecs_entity_t ecs_entity(EcsCamera) = ecs_column_entity(it, 5);
+    ecs_entity_t ecs_entity(EcsDirectionalLight) = ecs_column_entity(it, 6);
 
-    ecs_query_t *buffers = q->query;
+    ecs_query_t *buffers = q_buffers->query;
     vs_uniforms_t vs_u;
     fs_uniforms_t fs_u;
 
@@ -274,7 +329,7 @@ void SokolRender(ecs_iter_t *it) {
 
                 sg_apply_bindings(&bind);
                 sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &vs_u, sizeof(vs_uniforms_t));
-                sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &fs_u, sizeof(fs_uniforms_t));
+                sg_apply_uniforms(SG_SHADERSTAGE_FS, 1, &fs_u, sizeof(fs_uniforms_t));
 
                 sg_draw(0, buffer[b].index_count, buffer[b].instance_count);
             }
@@ -299,19 +354,28 @@ void FlecsSystemsSokolImport(
     ECS_IMPORT(world, FlecsComponentsGui);
 
     ECS_COMPONENT(world, SokolCanvas);
+    ECS_COMPONENT(world, SokolMaterial);
 
     ECS_SYSTEM(world, SokolSetCanvas, EcsOnSet,
         flecs.systems.sdl2.window.Window,
         flecs.components.gui.Canvas,
-        :Canvas);
+        :Canvas,
+        :Buffer,
+        :Material);
 
     ECS_SYSTEM(world, SokolUnsetCanvas, EcsUnSet, 
         Canvas);
 
+    // ECS_SYSTEM(world, SokolRegisterMaterial, EcsPostLoad,
+    //     [out] :flecs.systems.sokol.Material,
+    //     [in]   flecs.components.graphics.Specular || 
+    //            flecs.components.graphics.Emissive);
+
     ECS_SYSTEM(world, SokolRender, EcsOnStore, 
         Canvas, 
         flecs.components.gui.Canvas, 
-        flecs.system.Query,
+        flecs.system.Query FOR Buffer,
+        flecs.system.Query FOR Material,
         :flecs.components.graphics.Camera,
-        :flecs.components.graphics.DirectionalLight);
+        :flecs.components.graphics.DirectionalLight);      
 }
