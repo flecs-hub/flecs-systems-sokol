@@ -6,10 +6,12 @@ typedef struct SokolBuffer {
     sg_buffer index_buffer;         /* Indices (static) */
     sg_buffer color_buffer;         /* Color (per instance) */
     sg_buffer transform_buffer;     /* Transform (per instance) */
+    sg_buffer material_buffer;      /* Material ids (per instance) */
 
     /* Application-cached buffers */
     ecs_rgba_t *colors;
     mat4 *transforms;
+    uint32_t *materials;
 
     /* Number of instances */
     int32_t instance_count;

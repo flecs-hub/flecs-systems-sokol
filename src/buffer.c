@@ -5,9 +5,11 @@ ECS_CTOR(SokolBuffer, ptr, {
     ptr->index_buffer = (sg_buffer){ 0 };
     ptr->color_buffer = (sg_buffer){ 0 };
     ptr->transform_buffer = (sg_buffer){ 0 };
+    ptr->material_buffer = (sg_buffer){ 0 };
 
     ptr->colors = NULL;
     ptr->transforms = NULL;
+    ptr->materials = NULL;
 
     ptr->instance_count = 0;
     ptr->instance_max = 0;
@@ -17,6 +19,7 @@ ECS_CTOR(SokolBuffer, ptr, {
 ECS_DTOR(SokolBuffer, ptr, {
     ecs_os_free(ptr->colors);
     ecs_os_free(ptr->transforms);
+    ecs_os_free(ptr->materials);
 });
 
 static
@@ -195,7 +198,7 @@ void attach_buffer(
         SokolBuffer *b = ecs_column(it, SokolBuffer, 2);
         ecs_iter_t qit = ecs_query_iter(query);
         
-        /* First count number of instances */
+        /* Count number of instances to ensure GPU buffers are big enough */
         int32_t count = 0;
         while (ecs_query_next(&qit)) {
             count += qit.count;
@@ -204,19 +207,25 @@ void attach_buffer(
         if (!count) {
             b->instance_count = 0;
         } else {
+            /* Make sure application buffers are large enough */
             ecs_rgba_t *colors = b->colors;
             mat4 *transforms = b->transforms;
-            int32_t instance_count = b->instance_count;
-            int32_t instance_max = b->instance_max;
+            uint32_t *materials = b->materials;
 
             int colors_size = count * sizeof(ecs_rgba_t);
             int transforms_size = count * sizeof(EcsTransform3);
+            int materials_size = count * sizeof(uint32_t);
+
+            int32_t instance_count = b->instance_count;
+            int32_t instance_max = b->instance_max;
 
             if (instance_count < count) {
                 colors = ecs_os_realloc(colors, colors_size);
                 transforms = ecs_os_realloc(transforms, transforms_size);
+                materials = ecs_os_realloc(materials, materials_size);
             }
 
+            /* Copy data into application buffers */
             int32_t cursor = 0;
             int i;
 
@@ -224,6 +233,7 @@ void attach_buffer(
             while (ecs_query_next(&qit)) {
                 EcsTransform3 *t = ecs_column(&qit, EcsTransform3, 1);
                 EcsColor *c = ecs_column(&qit, EcsColor, 3);
+                SokolMaterial *mat = ecs_column(&qit, SokolMaterial, 4);
 
                 if (ecs_is_owned(&qit, 3)) {
                     memcpy(&colors[cursor], c, qit.count * sizeof(ecs_rgba_t));
@@ -233,6 +243,15 @@ void attach_buffer(
                     }
                 }
 
+                if (mat) {
+                    uint16_t material_id = mat->material_id;
+                    for (i = 0; i < qit.count; i ++) {
+                        materials[cursor + i] = material_id;
+                    }
+                } else {
+                    memset(&materials[cursor], 0, qit.count * sizeof(uint32_t));
+                }
+
                 memcpy(&transforms[cursor], t, qit.count * sizeof(mat4));
                 action(&qit, cursor, transforms);
                 cursor += qit.count;
@@ -240,6 +259,7 @@ void attach_buffer(
 
             b->colors = colors;
             b->transforms = transforms;
+            b->materials = materials;
             b->instance_count = count;
 
             if (count > instance_max) {
@@ -250,6 +270,7 @@ void attach_buffer(
                     
                     sg_destroy_buffer(b->color_buffer);
                     sg_destroy_buffer(b->transform_buffer);
+                    sg_destroy_buffer(b->material_buffer);
                 }
 
                 while (count > instance_max) {
@@ -269,11 +290,17 @@ void attach_buffer(
                     .usage = SG_USAGE_STREAM
                 });
 
+                b->material_buffer = sg_make_buffer(&(sg_buffer_desc){
+                    .size = instance_max * sizeof(uint32_t),
+                    .usage = SG_USAGE_STREAM
+                });
+
                 b->instance_max = instance_max;
             }
 
             sg_update_buffer(b->color_buffer, colors, colors_size);
             sg_update_buffer(b->transform_buffer, transforms, transforms_size);
+            sg_update_buffer(b->material_buffer, materials, materials_size);
         }
     }
 }
@@ -356,7 +383,8 @@ void FlecsSystemsSokolBufferImport(
             ecs_query_new(world, 
                 "[in]          flecs.components.transform.Transform3,"
                 "[in] ANY:     flecs.components.geometry.Rectangle,"
-                "[in] ANY:     flecs.components.graphics.Color")
+                "[in] ANY:     flecs.components.graphics.Color,"
+                "[in] ?SHARED: flecs.systems.sokol.Material")
         });
 
     /* Create system that manages buffers for rectangles */
@@ -374,8 +402,9 @@ void FlecsSystemsSokolBufferImport(
             ecs_query_new(world, 
                 "[in]          flecs.components.transform.Transform3,"
                 "[in] ANY:     flecs.components.geometry.Box,"
-                "[in] ANY:     flecs.components.graphics.Color")
-        });        
+                "[in] ANY:     flecs.components.graphics.Color,"
+                "[in] ?SHARED: flecs.systems.sokol.Material")
+        });
 
     /* Create system that manages buffers for rectangles */
     ECS_SYSTEM(world, SokolAttachBox, EcsPostLoad, 

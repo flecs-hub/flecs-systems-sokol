@@ -14,15 +14,15 @@ typedef struct fs_uniforms_t {
     vec3 eye_pos;
 } fs_uniforms_t;
 
-typedef struct fs_material_t {
+typedef struct vs_material_t {
     float specular_power;
     float shininess;
     float emissive;
-} fs_material_t;
+} vs_material_t;
 
-typedef struct fs_materials_t {
-    fs_material_t materials[FS_MAX_MATERIALS];
-} fs_materials_t;
+typedef struct vs_materials_t {
+    vs_material_t array[FS_MAX_MATERIALS];
+} vs_materials_t;
 
 typedef struct SokolCanvas {
     SDL_Window* sdl_window;
@@ -54,20 +54,22 @@ static
 sg_pipeline init_pipeline(void) {
     /* create an instancing shader */
     sg_shader shd = sg_make_shader(&(sg_shader_desc){
-        .vs.uniform_blocks[0] = {
-            .size = sizeof(vs_uniforms_t),
-            .uniforms = {
-                [0] = { .name="u_mat_vp", .type=SG_UNIFORMTYPE_MAT4 }
-            }
-        },
-        .fs.uniform_blocks = {
+        .vs.uniform_blocks = {
             [0] = {
-                .size = sizeof(fs_materials_t),
+                .size = sizeof(vs_uniforms_t),
+                .uniforms = {
+                    [0] = { .name="u_mat_vp", .type=SG_UNIFORMTYPE_MAT4 },
+                },
+            },
+            [1] = {
+                .size = sizeof(vs_materials_t),
                 .uniforms = {
                     [0] = { .name="u_materials", .type=SG_UNIFORMTYPE_FLOAT3, .array_count=FS_MAX_MATERIALS}
                 }
-            },
-            [1] = {
+            } 
+        },
+        .fs.uniform_blocks = {
+            [0] = {
                 .size = sizeof(fs_uniforms_t),
                 .uniforms = {
                     [0] = { .name="u_light_ambient", .type=SG_UNIFORMTYPE_FLOAT3 },
@@ -75,24 +77,27 @@ sg_pipeline init_pipeline(void) {
                     [2] = { .name="u_light_color", .type=SG_UNIFORMTYPE_FLOAT3 },
                     [3] = { .name="u_eye_pos", .type=SG_UNIFORMTYPE_FLOAT3 }
                 }
-            }
+            }           
         },
         .vs.source =
             "#version 330\n"
             "uniform mat4 u_mat_vp;\n"
+            "uniform vec3 u_materials[255];\n"
             "layout(location=0) in vec4 v_position;\n"
             "layout(location=1) in vec3 v_normal;\n"
             "layout(location=2) in vec4 i_color;\n"
-            "layout(location=3) in mat4 i_mat_m;\n"
+            "layout(location=3) in uint i_material;\n"
+            "layout(location=4) in mat4 i_mat_m;\n"
             "out vec4 position;\n"
             "out vec3 normal;\n"
             "out vec4 color;\n"
-            "out vec4 material;\n"
+            "out vec3 material;\n"
             "void main() {\n"
             "  gl_Position = u_mat_vp * i_mat_m * v_position;\n"
             "  position = (i_mat_m * v_position);\n"
             "  normal = (i_mat_m * vec4(v_normal, 0.0)).xyz;\n"
             "  color = i_color;\n"
+            "  material = u_materials[i_material];\n"
             "}\n",
         .fs.source =
             "#version 330\n"
@@ -103,10 +108,12 @@ sg_pipeline init_pipeline(void) {
             "in vec4 position;\n"
             "in vec3 normal;\n"
             "in vec4 color;\n"
+            "in vec3 material;\n"
             "out vec4 frag_color;\n"
             "void main() {\n"
-            "  float specular_power = 1.5;\n"
-            "  float shininess = 256;\n"
+            "  float specular_power = material.x;\n"
+            "  float shininess = material.y;\n"
+            "  float emissive = material.z;\n"
             "  vec4 ambient = vec4(u_light_ambient, 0);\n"
             "  vec3 l = normalize(u_light_direction);\n"
             "  vec3 n = normalize(normal);\n"
@@ -117,9 +124,11 @@ sg_pipeline init_pipeline(void) {
             "    float r_dot_v = max(dot(r, v), 0.0);\n"
             "    vec4 specular = vec4(specular_power * pow(r_dot_v, shininess) * dot_n_l * u_light_color, 0);\n"
             "    vec4 diffuse = vec4(u_light_color, 0) * dot_n_l;\n"
-            "    frag_color = color * (ambient + diffuse) + specular;\n"
+            "    vec4 light = emissive + (1.0 - emissive) * (ambient + diffuse);\n"
+            "    frag_color = light * color + specular;\n"
             "  } else {\n"
-            "    frag_color = ambient * color;\n"
+            "    vec4 light = emissive + (1.0 - emissive) * (ambient);\n"
+            "    frag_color = light * color;\n"
             "  }\n"
             "}\n"
     });
@@ -131,7 +140,8 @@ sg_pipeline init_pipeline(void) {
         .layout = {
             .buffers = {
                 [2] = { .stride = 16, .step_func=SG_VERTEXSTEP_PER_INSTANCE },
-                [3] = { .stride = 64, .step_func=SG_VERTEXSTEP_PER_INSTANCE }
+                [3] = { .stride = 4,  .step_func=SG_VERTEXSTEP_PER_INSTANCE },
+                [4] = { .stride = 64, .step_func=SG_VERTEXSTEP_PER_INSTANCE }
             },
 
             .attrs = {
@@ -142,11 +152,14 @@ sg_pipeline init_pipeline(void) {
                 /* Color buffer (per instance) */
                 [2] = { .buffer_index=2, .offset=0, .format=SG_VERTEXFORMAT_FLOAT4 },
 
+                /* Material id buffer (per instance) */
+                [3] = { .buffer_index=3, .offset=0, .format=SG_VERTEXFORMAT_FLOAT },                
+
                 /* Matrix (per instance) */
-                [3] = { .buffer_index=3, .offset=0,  .format=SG_VERTEXFORMAT_FLOAT4 },
-                [4] = { .buffer_index=3, .offset=16, .format=SG_VERTEXFORMAT_FLOAT4 },
-                [5] = { .buffer_index=3, .offset=32, .format=SG_VERTEXFORMAT_FLOAT4 },
-                [6] = { .buffer_index=3, .offset=48, .format=SG_VERTEXFORMAT_FLOAT4 }
+                [4] = { .buffer_index=4, .offset=0,  .format=SG_VERTEXFORMAT_FLOAT4 },
+                [5] = { .buffer_index=4, .offset=16, .format=SG_VERTEXFORMAT_FLOAT4 },
+                [6] = { .buffer_index=4, .offset=32, .format=SG_VERTEXFORMAT_FLOAT4 },
+                [7] = { .buffer_index=4, .offset=48, .format=SG_VERTEXFORMAT_FLOAT4 }
             }
         },
         .depth_stencil = {
@@ -244,7 +257,11 @@ void SokolSetCanvas(ecs_iter_t *it) {
         });
 
         ecs_set_trait(world, it->entities[i], SokolMaterial, EcsQuery, {
-            ecs_query_new(world, "[in] flecs.systems.sokol.Material")
+            ecs_query_new(world, 
+                "[in] flecs.systems.sokol.Material,"
+                "[in] ?flecs.components.graphics.Specular,"
+                "[in] ?flecs.components.graphics.Emissive,"
+                "     ?Prefab")
         });
 
         sokol_init_buffers(world);
@@ -268,10 +285,11 @@ static
 void SokolRegisterMaterial(ecs_iter_t *it) {
     ecs_entity_t ecs_entity(SokolMaterial) = ecs_column_entity(it, 1);
 
-    static uint16_t next_material = 0;
+    static uint16_t next_material = 1; /* Material 0 is the default material */
 
     int i;
     for (i = 0; i < it->count; i ++) {
+        printf("Register material '%s'\n", ecs_get_name(it->world, it->entities[i]));
         ecs_set(it->world, it->entities[i], SokolMaterial, {
             next_material ++
         });
@@ -293,6 +311,42 @@ void SokolRender(ecs_iter_t *it) {
     ecs_query_t *buffers = q_buffers->query;
     vs_uniforms_t vs_u;
     fs_uniforms_t fs_u;
+    vs_materials_t mat_u = {};
+
+    /* Update material buffer */
+    ecs_iter_t qit = ecs_query_iter(q_mats->query);
+    while (ecs_query_next(&qit)) {
+        SokolMaterial *mat = ecs_column(&qit, SokolMaterial, 1);
+        EcsSpecular *spec = ecs_column(&qit, EcsSpecular, 2);
+        EcsEmissive *em = ecs_column(&qit, EcsEmissive, 3);
+
+        int i;
+        if (spec) {
+            for (i = 0; i < qit.count; i ++) {
+                uint16_t id = mat[i].material_id;
+                mat_u.array[id].specular_power = spec[i].specular_power;
+                mat_u.array[id].shininess = spec[i].shininess;
+            }
+        } else {
+            for (i = 0; i < qit.count; i ++) {
+                uint16_t id = mat[i].material_id;
+                mat_u.array[id].specular_power = 0;
+                mat_u.array[id].shininess = 0;
+            }            
+        }
+
+        if (em) {
+            for (i = 0; i < qit.count; i ++) {
+                uint16_t id = mat[i].material_id;
+                mat_u.array[id].emissive = em[i].value;
+            }
+        } else {
+            for (i = 0; i < qit.count; i ++) {
+                uint16_t id = mat[i].material_id;
+                mat_u.array[id].emissive = 0;
+            }
+        }
+    }
 
     /* Loop each canvas */
     int32_t i;
@@ -322,22 +376,23 @@ void SokolRender(ecs_iter_t *it) {
                         [0] = buffer[b].vertex_buffer,
                         [1] = buffer[b].normal_buffer,
                         [2] = buffer[b].color_buffer,
-                        [3] = buffer[b].transform_buffer
+                        [3] = buffer[b].material_buffer,
+                        [4] = buffer[b].transform_buffer
                     },
                     .index_buffer = buffer[b].index_buffer
                 };
 
                 sg_apply_bindings(&bind);
                 sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &vs_u, sizeof(vs_uniforms_t));
-                sg_apply_uniforms(SG_SHADERSTAGE_FS, 1, &fs_u, sizeof(fs_uniforms_t));
-
+                sg_apply_uniforms(SG_SHADERSTAGE_VS, 1, &mat_u, sizeof(vs_materials_t));
+                sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &fs_u, sizeof(fs_uniforms_t));
                 sg_draw(0, buffer[b].index_count, buffer[b].instance_count);
             }
         }
 
         sg_end_pass();
-
         sg_commit();
+
         SDL_GL_SwapWindow(sk_canvas->sdl_window);
     }
 }
@@ -349,12 +404,13 @@ void FlecsSystemsSokolImport(
 
     ecs_set_name_prefix(world, "Sokol");
     
-    ECS_IMPORT(world, FlecsSystemsSokolBuffer);
     ECS_IMPORT(world, FlecsSystemsSdl2);
     ECS_IMPORT(world, FlecsComponentsGui);
 
     ECS_COMPONENT(world, SokolCanvas);
     ECS_COMPONENT(world, SokolMaterial);
+
+    ECS_IMPORT(world, FlecsSystemsSokolBuffer);
 
     ECS_SYSTEM(world, SokolSetCanvas, EcsOnSet,
         flecs.systems.sdl2.window.Window,
@@ -366,10 +422,11 @@ void FlecsSystemsSokolImport(
     ECS_SYSTEM(world, SokolUnsetCanvas, EcsUnSet, 
         Canvas);
 
-    // ECS_SYSTEM(world, SokolRegisterMaterial, EcsPostLoad,
-    //     [out] :flecs.systems.sokol.Material,
-    //     [in]   flecs.components.graphics.Specular || 
-    //            flecs.components.graphics.Emissive);
+    ECS_SYSTEM(world, SokolRegisterMaterial, EcsPostLoad,
+        [out] !flecs.systems.sokol.Material,
+        [in]   flecs.components.graphics.Specular || 
+               flecs.components.graphics.Emissive,
+               ?Prefab);
 
     ECS_SYSTEM(world, SokolRender, EcsOnStore, 
         Canvas, 
