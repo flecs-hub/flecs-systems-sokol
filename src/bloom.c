@@ -54,8 +54,8 @@ SokolEffect sokol_init_bloom(
     int width, int height)
 {
     SokolEffect fx = {0};
-    int blur_w = width * 0.5;
-    int blur_h = height * 0.5;
+    int blur_w = width * 0.2;
+    int blur_h = height * 0.2;
 
     int threshold_pass = sokol_effect_add_pass(&fx, (sokol_pass_desc_t){
         .width = blur_w, 

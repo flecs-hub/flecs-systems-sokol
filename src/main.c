@@ -2,9 +2,11 @@
 #include "private_include.h"
 
 #define FS_MAX_MATERIALS (255)
+#define SHADOW_MAP_SIZE (4096)
 
 typedef struct vs_uniforms_t {
     mat4 mat_vp;
+    mat4 light_mat_vp;
 } vs_uniforms_t;
 
 typedef struct fs_uniforms_t {
@@ -12,6 +14,7 @@ typedef struct fs_uniforms_t {
     vec3 light_direction;
     vec3 light_color;
     vec3 eye_pos;
+    float shadow_map_size;
 } fs_uniforms_t;
 
 typedef struct vs_material_t {
@@ -73,8 +76,30 @@ sg_pass_action init_tex_pass_action(void)
     };
 }
 
-static
-sg_image init_render_target(int32_t width, int32_t height) {
+sg_image sokol_init_render_target_8(
+    int32_t width, 
+    int32_t height) 
+{
+    sg_image_desc img_desc = {
+        .render_target = true,
+        .width = width,
+        .height = height,
+        .wrap_u = SG_WRAP_CLAMP_TO_EDGE,
+        .wrap_v = SG_WRAP_CLAMP_TO_EDGE,
+        .pixel_format = SG_PIXELFORMAT_RGBA8,
+        .min_filter = SG_FILTER_LINEAR,
+        .mag_filter = SG_FILTER_LINEAR,
+        .sample_count = 1,
+        .label = "color-image"
+    };
+
+    return sg_make_image(&img_desc);
+}
+
+sg_image sokol_init_render_target_16(
+    int32_t width, 
+    int32_t height) 
+{
     sg_image_desc img_desc = {
         .render_target = true,
         .width = width,
@@ -91,8 +116,10 @@ sg_image init_render_target(int32_t width, int32_t height) {
     return sg_make_image(&img_desc);
 }
 
-static
-sg_image init_render_depth_target(int32_t width, int32_t height) {
+sg_image sokol_init_render_depth_target(
+    int32_t width, 
+    int32_t height) 
+{
     sg_image_desc img_desc = {
         .render_target = true,
         .width = width,
@@ -108,7 +135,10 @@ sg_image init_render_depth_target(int32_t width, int32_t height) {
 }
 
 static
-sg_pass init_offscreen_pass(sg_image img, sg_image depth_img) {
+sg_pass init_offscreen_pass(
+    sg_image img, 
+    sg_image depth_img) 
+{
     return sg_make_pass(&(sg_pass_desc){
         .color_attachments[0].image = img,
         .depth_stencil_attachment.image = depth_img,
@@ -125,6 +155,7 @@ sg_pipeline init_pipeline(void) {
                 .size = sizeof(vs_uniforms_t),
                 .uniforms = {
                     [0] = { .name="u_mat_vp", .type=SG_UNIFORMTYPE_MAT4 },
+                    [1] = { .name="u_light_vp", .type=SG_UNIFORMTYPE_MAT4 }
                 },
             },
             [1] = {
@@ -134,20 +165,30 @@ sg_pipeline init_pipeline(void) {
                 }
             } 
         },
-        .fs.uniform_blocks = {
-            [0] = {
-                .size = sizeof(fs_uniforms_t),
-                .uniforms = {
-                    [0] = { .name="u_light_ambient", .type=SG_UNIFORMTYPE_FLOAT3 },
-                    [1] = { .name="u_light_direction", .type=SG_UNIFORMTYPE_FLOAT3 },
-                    [2] = { .name="u_light_color", .type=SG_UNIFORMTYPE_FLOAT3 },
-                    [3] = { .name="u_eye_pos", .type=SG_UNIFORMTYPE_FLOAT3 }
+        .fs = {
+            .images = {
+                [0] = {
+                    .name = "shadow_map",
+                    .type = SG_IMAGETYPE_2D
                 }
-            }           
+            },
+            .uniform_blocks = {
+                [0] = {
+                    .size = sizeof(fs_uniforms_t),
+                    .uniforms = {
+                        [0] = { .name="u_light_ambient", .type=SG_UNIFORMTYPE_FLOAT3 },
+                        [1] = { .name="u_light_direction", .type=SG_UNIFORMTYPE_FLOAT3 },
+                        [2] = { .name="u_light_color", .type=SG_UNIFORMTYPE_FLOAT3 },
+                        [3] = { .name="u_eye_pos", .type=SG_UNIFORMTYPE_FLOAT3 },
+                        [4] = { .name="u_shadow_map_size", .type=SG_UNIFORMTYPE_FLOAT }
+                    }
+                }
+            }        
         },
         .vs.source =
             "#version 330\n"
             "uniform mat4 u_mat_vp;\n"
+            "uniform mat4 u_light_vp;\n"
             "uniform vec3 u_materials[255];\n"
             "layout(location=0) in vec4 v_position;\n"
             "layout(location=1) in vec3 v_normal;\n"
@@ -155,12 +196,14 @@ sg_pipeline init_pipeline(void) {
             "layout(location=3) in uint i_material;\n"
             "layout(location=4) in mat4 i_mat_m;\n"
             "out vec4 position;\n"
+            "out vec4 light_position;\n"
             "out vec3 normal;\n"
             "out vec4 color;\n"
             "out vec3 material;\n"
             "flat out uint material_id;\n"
             "void main() {\n"
             "  gl_Position = u_mat_vp * i_mat_m * v_position;\n"
+            "  light_position = u_light_vp * i_mat_m * v_position;\n"
             "  position = (i_mat_m * v_position);\n"
             "  normal = (i_mat_m * vec4(v_normal, 0.0)).xyz;\n"
             "  color = i_color;\n"
@@ -172,12 +215,39 @@ sg_pipeline init_pipeline(void) {
             "uniform vec3 u_light_direction;\n"
             "uniform vec3 u_light_color;\n"
             "uniform vec3 u_eye_pos;\n"
+            "uniform float u_shadow_map_size;\n"
+            "uniform sampler2D shadow_map;\n"
             "in vec4 position;\n"
+            "in vec4 light_position;\n"
             "in vec3 normal;\n"
             "in vec4 color;\n"
             "in vec3 material;\n"
             "out vec4 frag_color;\n"
-            "flat in uint material_id;\n"
+
+            "const int pcf_count = 2;\n"
+            "const int pcf_samples = (2 * pcf_count + 1) * (2 * pcf_count + 1);\n"
+            "const float texel_c = 1.0;\n"
+
+            "float decodeDepth(vec4 rgba) {\n"
+            "    return dot(rgba, vec4(1.0, 1.0/255.0, 1.0/65025.0, 1.0/160581375.0));\n"
+            "}\n"
+
+            "float sampleShadow(sampler2D shadowMap, vec2 uv, float compare) {\n"
+            "    float depth = decodeDepth(texture(shadowMap, vec2(uv.x, uv.y)));\n"
+            "    depth += 0.00001;\n"
+            "    return step(compare, depth);\n"
+            "}\n"
+
+            "float sampleShadowPCF(sampler2D shadowMap, vec2 uv, float texel_size, float compare) {\n"
+            "    float result = 0.0;\n"
+            "    for (int x = -pcf_count; x <= pcf_count; x++) {\n"
+            "        for (int y = -pcf_count; y <= pcf_count; y++) {\n"
+            "            result += sampleShadow(shadowMap, uv + vec2(x, y) * texel_size * texel_c, compare);\n"
+            "        }\n"
+            "    }\n"
+            "    return result / pcf_samples;\n"
+            "}\n"
+
             "void main() {\n"
             "  float specular_power = material.x;\n"
             "  float shininess = material.y;\n"
@@ -186,14 +256,24 @@ sg_pipeline init_pipeline(void) {
             "  vec3 l = normalize(u_light_direction);\n"
             "  vec3 n = normalize(normal);\n"
             "  float dot_n_l = dot(n, l);\n"
+
             "  if (dot_n_l >= 0.0) {"
             "    vec3 v = normalize(u_eye_pos - position.xyz);\n"
             "    vec3 r = reflect(-l, n);\n"
+
+            "    vec3 light_pos = light_position.xyz / light_position.w;\n"
+            "    vec2 sm_uv = (light_pos.xy + 1.0) * 0.5;\n"
+            "    float depth = light_position.z;\n"
+            "    float texel_size = 1.0 / u_shadow_map_size;\n"
+            "    float s = sampleShadowPCF(shadow_map, sm_uv, texel_size, depth);\n"
+
             "    float r_dot_v = max(dot(r, v), 0.0);\n"
             "    vec4 specular = vec4(specular_power * pow(r_dot_v, shininess) * dot_n_l * u_light_color, 0);\n"
             "    vec4 diffuse = vec4(u_light_color, 0) * dot_n_l;\n"
-            "    vec4 light = emissive + clamp(1.0 - emissive, 0, 1.0) * (ambient + diffuse);\n"
-            "    frag_color = light * color + specular;\n"
+            "    vec4 light = emissive + clamp(1.0 - emissive, 0, 1.0) * (ambient + s * diffuse);\n"
+            "    frag_color = light * color + s * specular;\n"
+            // "    frag_color = vec4(depth, 0, 0, 0);\n"
+            // "    frag_color = vec4(texture(shadow_map, vec2(position.x / 20 + 0.5, position.z / 20 + 0.25)).xyz, 0);\n"
             "  } else {\n"
             "    vec4 light = emissive + clamp(1.0 - emissive, 0, 1.0) * (ambient);\n"
             "    frag_color = light * color;\n"
@@ -342,6 +422,8 @@ void init_uniforms(
     }
 
     glm_vec3_copy((float*)&canvas->ambient_light, fs_out->light_ambient);
+
+    fs_out->shadow_map_size = SHADOW_MAP_SIZE;
 }
 
 static
@@ -403,8 +485,8 @@ void SokolSetCanvas(ecs_iter_t *it) {
         assert(sg_isvalid());
         ecs_trace_1("sokol initialized");
 
-        sg_image offscreen_tex = init_render_target(w, h);
-        sg_image offscreen_depth_tex = init_render_depth_target(w, h);
+        sg_image offscreen_tex = sokol_init_render_target_16(w, h);
+        sg_image offscreen_depth_tex = sokol_init_render_depth_target(w, h);
 
         ecs_set(world, it->entities[i], SokolCanvas, {
             .sdl_window = sdl_window,
@@ -417,6 +499,7 @@ void SokolSetCanvas(ecs_iter_t *it) {
             .offscreen_depth_tex = offscreen_depth_tex,
             .offscreen_pass = init_offscreen_pass(offscreen_tex, offscreen_depth_tex),
             .offscreen_quad = init_quad(),
+            .shadow_pass = sokol_init_shadow_pass(SHADOW_MAP_SIZE),
             .fx_bloom = sokol_init_bloom(w, h)
         });
 
@@ -496,10 +579,21 @@ void SokolRender(ecs_iter_t *it) {
         SDL_GL_GetDrawableSize(sk_canvas[i].sdl_window, &w, &h);
         float aspect = (float)w / (float)h;
 
+        /* Get light data (if set) */
+        const EcsDirectionalLight *light_data = NULL;
+        ecs_entity_t light = canvas[i].directional_light;
+        if (light) {
+            light_data = ecs_get(world, light, EcsDirectionalLight);
+        }
+
+        /* Render shadow map */
+        sokol_run_shadow_pass(
+            buffers, &sk_canvas[i].shadow_pass, light_data, vs_u.light_mat_vp);
+
         init_uniforms(world, &canvas[i], aspect, &vs_u, &fs_u,
             ecs_entity(EcsCamera), ecs_entity(EcsDirectionalLight));
 
-        // sg_begin_default_pass(&sk_canvas->pass_action, w, h);
+        /* Render to offscreen texture so screen-space effects can be applied */
         sg_begin_pass(sk_canvas->offscreen_pass, &sk_canvas->pass_action);
         sg_apply_pipeline(sk_canvas->pip);
 
@@ -507,7 +601,7 @@ void SokolRender(ecs_iter_t *it) {
             sg_apply_uniforms(SG_SHADERSTAGE_VS, 1, &mat_u, sizeof(vs_materials_t));
         }
 
-        /* Loop buffers */
+        /* Loop buffers, render scene */
         ecs_iter_t qit = ecs_query_iter(buffers);
         while (ecs_query_next(&qit)) {
             SokolBuffer *buffer = ecs_column(&qit, SokolBuffer, 1);
@@ -525,7 +619,8 @@ void SokolRender(ecs_iter_t *it) {
                         [3] = buffer[b].material_buffer,
                         [4] = buffer[b].transform_buffer
                     },
-                    .index_buffer = buffer[b].index_buffer
+                    .index_buffer = buffer[b].index_buffer,
+                    .fs_images[0] = sk_canvas[i].shadow_pass.color_tex
                 };
 
                 sg_apply_bindings(&bind);
@@ -534,11 +629,13 @@ void SokolRender(ecs_iter_t *it) {
                 sg_draw(0, buffer[b].index_count, buffer[b].instance_count);
             }
         }
-
         sg_end_pass();
 
-        sg_image tex_fx = sokol_effect_run(sk_canvas, &sk_canvas->fx_bloom, sk_canvas->offscreen_tex);
+        /* Apply bloom effect */
+        sg_image tex_fx = sokol_effect_run(
+            sk_canvas, &sk_canvas->fx_bloom, sk_canvas->offscreen_tex);
 
+        /* Render resulting offscreen texture to screen */
         sg_begin_default_pass(&sk_canvas->tex_pass_action, w, h);
         sg_apply_pipeline(sk_canvas->tex_pip);
 
@@ -550,12 +647,9 @@ void SokolRender(ecs_iter_t *it) {
         };
 
         sg_apply_bindings(&bind);
-
         sg_draw(0, 6, 1);
         sg_end_pass();
-        
         sg_commit();
-
         SDL_GL_SwapWindow(sk_canvas->sdl_window);
     }
 }

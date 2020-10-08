@@ -16,6 +16,7 @@ typedef struct FlecsSystemsSokol {
     int32_t dummy;
 } FlecsSystemsSokol;
 
+FLECS_SYSTEMS_SOKOL_EXPORT
 void FlecsSystemsSokolImport(
     ecs_world_t *world);
 
