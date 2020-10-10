@@ -25,6 +25,19 @@ typedef struct sokol_resources_t {
     sg_buffer box_normals;
 } sokol_resources_t;
 
+/* Data that is collected once per frame and that is shared between passes */
+typedef struct sokol_render_state_t {
+    /* Computed by renderer */
+    ecs_world_t *world;
+    ecs_query_t *q_scene;
+    const EcsDirectionalLight *light;
+    const EcsCamera *camera;
+    int32_t width;
+    int32_t height;
+    float aspect;
+    mat4 light_mat_vp;
+} sokol_render_state_t;
+
 #include "resources.h"
 #include "geometry.h"
 #include "effect.h"
@@ -67,7 +80,5 @@ sokol_offscreen_pass_t sokol_init_shadow_pass(
     int size);    
 
 void sokol_run_shadow_pass(
-    ecs_query_t *buffers,
     sokol_offscreen_pass_t *pass,
-    const EcsDirectionalLight *light_data,
-    mat4 light_vp);
+    sokol_render_state_t *state);

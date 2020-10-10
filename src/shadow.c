@@ -102,37 +102,6 @@ sokol_offscreen_pass_t sokol_init_shadow_pass(
 }
 
 static
-void init_uniforms(
-    const EcsDirectionalLight *light,
-    vs_uniforms_t *vs_out)
-{
-    mat4 mat_p;
-    mat4 mat_v;
-    vec3 lookat = {0.0, 0.0, 0.0};
-    vec3 up = {0, 1, 0};
-
-    glm_ortho(-7, 7, -7, 7, -10, 30, mat_p);
-
-    vec4 dir = {
-        light->direction[0],
-        light->direction[1],
-        light->direction[2]
-    };
-    glm_vec4_scale(dir, 50, dir);
-    glm_lookat(dir, lookat, up, mat_v);
-
-    mat4 light_proj = {
-         { 0.5f, 0.0f, 0.0f, 0 },
-         { 0.0f, 0.5f, 0.0f, 0 },
-         { 0.0f, 0.0f, 0.5f, 0 },
-         { 0.5f, 0.5f, 0.5f, 1 }
-    };
-    
-    glm_mat4_mul(mat_p, light_proj, mat_p);
-    glm_mat4_mul(mat_p, mat_v, vs_out->mat_vp);
-}
-
-static
 void draw_instances(
     SokolGeometry *geometry,
     sokol_instances_t *instances)
@@ -153,21 +122,19 @@ void draw_instances(
 }
 
 void sokol_run_shadow_pass(
-    ecs_query_t *buffers,
     sokol_offscreen_pass_t *pass,
-    const EcsDirectionalLight *light_data,
-    mat4 light_vp) 
+    sokol_render_state_t *state)
 {
     /* Render to offscreen texture so screen-space effects can be applied */
     sg_begin_pass(pass->pass, &pass->pass_action);
     sg_apply_pipeline(pass->pip);
 
     vs_uniforms_t vs_u;
-    init_uniforms(light_data, &vs_u);
+    glm_mat4_copy(state->light_mat_vp, vs_u.mat_vp);
     sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &vs_u, sizeof(vs_uniforms_t));
 
     /* Loop buffers, render scene */
-    ecs_iter_t qit = ecs_query_iter(buffers);
+    ecs_iter_t qit = ecs_query_iter(state->q_scene);
     while (ecs_query_next(&qit)) {
         SokolGeometry *geometry = ecs_column(&qit, SokolGeometry, 1);
         
@@ -178,6 +145,4 @@ void sokol_run_shadow_pass(
         }
     }
     sg_end_pass();
-
-    glm_mat4_copy(vs_u.mat_vp, light_vp);
 }

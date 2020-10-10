@@ -459,6 +459,36 @@ void SokolRegisterMaterial(ecs_iter_t *it) {
 }
 
 static
+void init_light_vp(
+    sokol_render_state_t *state)
+{
+    mat4 mat_p;
+    mat4 mat_v;
+    vec3 lookat = {0.0, 0.0, 0.0};
+    vec3 up = {0, 1, 0};
+
+    glm_ortho(-7, 7, -7, 7, -10, 30, mat_p);
+
+    vec4 dir = {
+        state->light->direction[0],
+        state->light->direction[1],
+        state->light->direction[2]
+    };
+    glm_vec4_scale(dir, 50, dir);
+    glm_lookat(dir, lookat, up, mat_v);
+
+    mat4 light_proj = {
+         { 0.5f, 0.0f, 0.0f, 0 },
+         { 0.0f, 0.5f, 0.0f, 0 },
+         { 0.0f, 0.0f, 0.5f, 0 },
+         { 0.5f, 0.5f, 0.5f, 1 }
+    };
+    
+    glm_mat4_mul(mat_p, light_proj, mat_p);
+    glm_mat4_mul(mat_p, mat_v, state->light_mat_vp);
+}
+
+static
 void draw_instances(
     SokolGeometry *geometry,
     sokol_instances_t *instances,
@@ -494,7 +524,7 @@ void SokolRender(ecs_iter_t *it) {
     ecs_entity_t ecs_entity(EcsCamera) = ecs_column_entity(it, 5);
     ecs_entity_t ecs_entity(EcsDirectionalLight) = ecs_column_entity(it, 6);
 
-    ecs_query_t *buffers = q_buffers->query;
+    ecs_query_t *q_geometry = q_buffers->query;
     vs_uniforms_t vs_u;
     fs_uniforms_t fs_u;
     vs_materials_t mat_u = {};
@@ -509,22 +539,26 @@ void SokolRender(ecs_iter_t *it) {
     /* Loop each canvas */
     int32_t i;
     for (i = 0; i < it->count; i ++) {
-        int w, h;
-        SDL_GL_GetDrawableSize(r[i].sdl_window, &w, &h);
-        float aspect = (float)w / (float)h;
+        sokol_render_state_t state = {};
+        SDL_GL_GetDrawableSize(r[i].sdl_window, &state.width, &state.height);
+        state.aspect = (float)state.width / (float)state.height;
+        state.q_scene = q_geometry;
 
-        /* Get light data (if set) */
-        const EcsDirectionalLight *light_data = NULL;
-        ecs_entity_t light = canvas[i].directional_light;
-        if (light) {
-            light_data = ecs_get(world, light, EcsDirectionalLight);
+        ecs_entity_t camera = canvas[i].camera;
+        if (camera) {
+            state.camera = ecs_get(world, camera, EcsCamera);
         }
 
-        /* Render shadow map */
-        sokol_run_shadow_pass(
-            buffers, &r[i].shadow_pass, light_data, vs_u.light_mat_vp);
+        ecs_entity_t light = canvas[i].directional_light;
+        if (light) {
+            state.light = ecs_get(world, light, EcsDirectionalLight);
+            init_light_vp(&state);
+            
+            /* Render shadow map only when we have a light */
+            sokol_run_shadow_pass(&r[i].shadow_pass, &state);
+        }
 
-        init_uniforms(world, &canvas[i], aspect, &vs_u, &fs_u,
+        init_uniforms(world, &canvas[i], state.aspect, &vs_u, &fs_u,
             ecs_entity(EcsCamera), ecs_entity(EcsDirectionalLight));
 
         /* Render to offscreen texture so screen-space effects can be applied */
@@ -537,8 +571,8 @@ void SokolRender(ecs_iter_t *it) {
             sg_apply_uniforms(SG_SHADERSTAGE_VS, 1, &mat_u, sizeof(vs_materials_t));
         }
 
-        /* Loop buffers, render scene */
-        ecs_iter_t qit = ecs_query_iter(buffers);
+        /* Loop geometry, render scene */
+        ecs_iter_t qit = ecs_query_iter(q_geometry);
         while (ecs_query_next(&qit)) {
             SokolGeometry *geometry = ecs_column(&qit, SokolGeometry, 1);
 
@@ -555,7 +589,7 @@ void SokolRender(ecs_iter_t *it) {
             &r->resources, &r->fx_bloom, r->scene_pass.color_target);
 
         /* Render resulting offscreen texture to screen */
-        sg_begin_default_pass(&r->screen_pass.pass_action, w, h);
+        sg_begin_default_pass(&r->screen_pass.pass_action, state.width, state.height);
         sg_apply_pipeline(r->screen_pass.pip);
 
         sg_bindings bind = {
