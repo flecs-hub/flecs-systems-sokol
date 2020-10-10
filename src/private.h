@@ -53,10 +53,6 @@ typedef struct sokol_render_state_t {
     sg_image shadow_map;
 } sokol_render_state_t;
 
-#include "resources.h"
-#include "geometry.h"
-#include "effect.h"
-
 typedef struct sokol_offscreen_pass_t {
     sg_pass_action pass_action;
     sg_pass pass;
@@ -64,6 +60,10 @@ typedef struct sokol_offscreen_pass_t {
     sg_image depth_target;
     sg_image color_target;
 } sokol_offscreen_pass_t;
+
+#include "resources.h"
+#include "geometry.h"
+#include "effect.h"
 
 typedef struct sokol_screen_pass_t {
     sg_pass_action pass_action;

@@ -2,7 +2,7 @@
 
 static
 char* build_fs_shader(
-    sokol_pass_desc_t pass)
+    sokol_fx_pass_desc_t pass)
 {
     ecs_strbuf_t fs_shader = ECS_STRBUF_INIT;
 
@@ -11,7 +11,7 @@ char* build_fs_shader(
     "out vec4 frag_color;\n"
     "in vec2 uv;\n");
 
-    sokol_pass_input_t *input;
+    sokol_fx_pass_input_t *input;
     int i = 0;
     while (true) {
         input = &pass.inputs[i];
@@ -32,9 +32,9 @@ char* build_fs_shader(
 
 int sokol_effect_add_pass(
     SokolEffect *fx, 
-    sokol_pass_desc_t pass_desc)
+    sokol_fx_pass_desc_t pass_desc)
 {
-    sokol_pass_t *pass = &fx->pass[fx->pass_count ++];
+    sokol_fx_pass_t *pass = &fx->pass[fx->pass_count ++];
 
     char *fs_shader = build_fs_shader(pass_desc);
 
@@ -44,7 +44,7 @@ int sokol_effect_add_pass(
         .fs.source = fs_shader
     };
 
-    sokol_pass_input_t *input;
+    sokol_fx_pass_input_t *input;
     int i = 0;
     while (true) {
         input = &pass_desc.inputs[i];
@@ -59,12 +59,10 @@ int sokol_effect_add_pass(
     sg_shader shd = sg_make_shader(&shd_desc);
     pass->input_count = i;
 
-    /* Create fx pipeline */
-    pass->pip = sg_make_pipeline(&(sg_pipeline_desc){
+    pass->pass.pip = sg_make_pipeline(&(sg_pipeline_desc){
         .shader = shd,
         .layout = {         
             .attrs = {
-                /* Static geometry (position, uv) */
                 [0] = { .buffer_index=0, .format=SG_VERTEXFORMAT_FLOAT3 },
                 [1] = { .buffer_index=0, .format=SG_VERTEXFORMAT_FLOAT2 }
             }
@@ -79,35 +77,12 @@ int sokol_effect_add_pass(
         }
     });
 
-    /* Create output texture */ 
-    pass->output = sg_make_image(&(sg_image_desc){
-        .render_target = true,
-        .width = pass_desc.width,
-        .height = pass_desc.height,
-        .wrap_u = SG_WRAP_CLAMP_TO_EDGE,
-        .wrap_v = SG_WRAP_CLAMP_TO_EDGE,        
-        .pixel_format = SG_PIXELFORMAT_RGBA8,
-        .min_filter = SG_FILTER_LINEAR,
-        .mag_filter = SG_FILTER_LINEAR,
-        .sample_count = 1,
-        .label = "color-image"
-    });
+    pass->pass.color_target = sokol_target_rgba8(pass_desc.width, pass_desc.height);
+    pass->pass.depth_target = sokol_target_depth(pass_desc.width, pass_desc.height);
 
-    /* Create output depth texture */ 
-    pass->depth_output = sg_make_image(&(sg_image_desc){
-        .render_target = true,
-        .width = pass_desc.width,
-        .height = pass_desc.height,
-        .pixel_format = SG_PIXELFORMAT_DEPTH,
-        .min_filter = SG_FILTER_LINEAR,
-        .mag_filter = SG_FILTER_LINEAR,
-        .sample_count = 1,
-        .label = "depth-image"
-    });
-
-    pass->pass = sg_make_pass(&(sg_pass_desc){
-        .color_attachments[0].image = pass->output,
-        .depth_stencil_attachment.image = pass->depth_output,
+    pass->pass.pass = sg_make_pass(&(sg_pass_desc){
+        .color_attachments[0].image = pass->pass.color_target,
+        .depth_stencil_attachment.image = pass->pass.depth_target,
         .label = "fx-pass"
     }); 
 
@@ -118,11 +93,11 @@ static
 void effect_pass_draw(
     sokol_resources_t *res,
     SokolEffect *effect,
-    sokol_pass_t *fx_pass,
+    sokol_fx_pass_t *fx_pass,
     sg_image input_0)
 {
-    sg_begin_pass(fx_pass->pass, &fx_pass->pass_action);
-    sg_apply_pipeline(fx_pass->pip);
+    sg_begin_pass(fx_pass->pass.pass, &fx_pass->pass.pass_action);
+    sg_apply_pipeline(fx_pass->pass.pip);
     
     sg_bindings bind = {
         .vertex_buffers = { 
@@ -136,7 +111,7 @@ void effect_pass_draw(
         if (!input) {
             bind.fs_images[i] = input_0;
         } else {
-            bind.fs_images[i] = effect->pass[input - 1].output;
+            bind.fs_images[i] = effect->pass[input - 1].pass.color_target;
         }
     }
 
@@ -156,5 +131,5 @@ sg_image sokol_effect_run(
         effect_pass_draw(res, effect, &effect->pass[i], input);
     }
 
-    return effect->pass[effect->pass_count - 1].output;
+    return effect->pass[effect->pass_count - 1].pass.color_target;
 }

@@ -57,7 +57,7 @@ SokolEffect sokol_init_bloom(
     int blur_w = width * 0.2;
     int blur_h = height * 0.2;
 
-    int threshold_pass = sokol_effect_add_pass(&fx, (sokol_pass_desc_t){
+    int threshold_pass = sokol_effect_add_pass(&fx, (sokol_fx_pass_desc_t){
         .width = blur_w, 
         .height = blur_h, 
         .shader = shd_threshold,
@@ -66,7 +66,7 @@ SokolEffect sokol_init_bloom(
         }
     });
 
-    int blur_h_pass = sokol_effect_add_pass(&fx, (sokol_pass_desc_t){
+    int blur_h_pass = sokol_effect_add_pass(&fx, (sokol_fx_pass_desc_t){
         .width = blur_w, 
         .height = blur_h, 
         .shader = shd_h_blur,
@@ -75,7 +75,7 @@ SokolEffect sokol_init_bloom(
         }
     });
 
-    int blur_v_pass = sokol_effect_add_pass(&fx, (sokol_pass_desc_t){
+    int blur_v_pass = sokol_effect_add_pass(&fx, (sokol_fx_pass_desc_t){
         .width = blur_w, 
         .height = blur_h, 
         .shader = shd_v_blur,
@@ -84,7 +84,7 @@ SokolEffect sokol_init_bloom(
         }
     });
 
-    sokol_effect_add_pass(&fx, (sokol_pass_desc_t){
+    sokol_effect_add_pass(&fx, (sokol_fx_pass_desc_t){
         .width = width, 
         .height = height, 
         .shader = shd_blend,
