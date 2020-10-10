@@ -1,5 +1,5 @@
 #define SOKOL_IMPL
-#include "private_include.h"
+#include "private.h"
 
 #define FS_MAX_MATERIALS (255)
 #define SHADOW_MAP_SIZE (4096)
@@ -26,113 +26,6 @@ typedef struct vs_material_t {
 typedef struct vs_materials_t {
     vs_material_t array[FS_MAX_MATERIALS];
 } vs_materials_t;
-
-static
-sg_buffer init_quad() {
-    float quad_data[] = {
-        -1.0f, -1.0f,  0.0f,   0, 0,
-         1.0f, -1.0f,  0.0f,   1, 0,
-         1.0f,  1.0f,  0.0f,   1, 1,
-
-        -1.0f, -1.0f,  0.0f,   0, 0,
-         1.0f,  1.0f,  0.0f,   1, 1,
-        -1.0f,  1.0f,  0.0f,   0, 1
-    };
-
-    return sg_make_buffer(&(sg_buffer_desc){
-        .size = sizeof(quad_data),
-        .content = quad_data,
-        .usage = SG_USAGE_IMMUTABLE
-    });
-}
-
-static
-sg_pass_action init_pass_action(
-    const EcsCanvas *canvas) 
-{
-    ecs_rgb_t bg_color = canvas->background_color;
-
-    return (sg_pass_action) {
-        .colors[0] = {
-            .action = SG_ACTION_CLEAR, 
-            .val = {
-                bg_color.r,
-                bg_color.g,
-                bg_color.b,
-                1.0f 
-            }
-        } 
-    };
-}
-
-static
-sg_pass_action init_tex_pass_action(void) 
-{
-    return (sg_pass_action) {
-        .colors[0] = {
-            .action = SG_ACTION_CLEAR, 
-            .val = {0, 0, 0}
-        } 
-    };
-}
-
-sg_image sokol_init_render_target_8(
-    int32_t width, 
-    int32_t height) 
-{
-    sg_image_desc img_desc = {
-        .render_target = true,
-        .width = width,
-        .height = height,
-        .wrap_u = SG_WRAP_CLAMP_TO_EDGE,
-        .wrap_v = SG_WRAP_CLAMP_TO_EDGE,
-        .pixel_format = SG_PIXELFORMAT_RGBA8,
-        .min_filter = SG_FILTER_LINEAR,
-        .mag_filter = SG_FILTER_LINEAR,
-        .sample_count = 1,
-        .label = "color-image"
-    };
-
-    return sg_make_image(&img_desc);
-}
-
-sg_image sokol_init_render_target_16(
-    int32_t width, 
-    int32_t height) 
-{
-    sg_image_desc img_desc = {
-        .render_target = true,
-        .width = width,
-        .height = height,
-        .wrap_u = SG_WRAP_CLAMP_TO_EDGE,
-        .wrap_v = SG_WRAP_CLAMP_TO_EDGE,
-        .pixel_format = SG_PIXELFORMAT_RGBA16F,
-        .min_filter = SG_FILTER_LINEAR,
-        .mag_filter = SG_FILTER_LINEAR,
-        .sample_count = 1,
-        .label = "color-image"
-    };
-
-    return sg_make_image(&img_desc);
-}
-
-sg_image sokol_init_render_depth_target(
-    int32_t width, 
-    int32_t height) 
-{
-    sg_image_desc img_desc = {
-        .render_target = true,
-        .width = width,
-        .height = height,
-        .pixel_format = SG_PIXELFORMAT_DEPTH,
-        .min_filter = SG_FILTER_LINEAR,
-        .mag_filter = SG_FILTER_LINEAR,
-        .sample_count = 1,
-        .label = "depth-image"
-    };
-
-    return sg_make_image(&img_desc);
-}
 
 static
 sg_pass init_offscreen_pass(
@@ -465,6 +358,21 @@ void init_materials(
 }
 
 static
+sokol_resources_t init_resources(void) {
+    return (sokol_resources_t){
+        .quad = sokol_buffer_quad(),
+
+        .rect = sokol_buffer_rectangle(),
+        .rect_indices = sokol_buffer_rectangle_indices(),
+        .rect_normals = sokol_buffer_rectangle_normals(),
+
+        .box = sokol_buffer_box(),
+        .box_indices = sokol_buffer_box_indices(),
+        .box_normals = sokol_buffer_box_normals()
+    };
+}
+
+static
 void SokolSetRenderer(ecs_iter_t *it) {
     ecs_world_t *world = it->world;
     Sdl2Window *window = ecs_column(it, Sdl2Window, 1);
@@ -483,20 +391,21 @@ void SokolSetRenderer(ecs_iter_t *it) {
         assert(sg_isvalid());
         ecs_trace_1("sokol initialized");
 
-        sg_image offscreen_tex = sokol_init_render_target_16(w, h);
-        sg_image offscreen_depth_tex = sokol_init_render_depth_target(w, h);
+        sokol_resources_t resources = init_resources();
+        sg_image offscreen_tex = sokol_target_rgba16f(w, h);
+        sg_image offscreen_depth_tex = sokol_target_depth(w, h);
 
         ecs_set(world, it->entities[i], SokolRenderer, {
+            .resources = resources,
             .sdl_window = sdl_window,
             .gl_context = ctx,
-            .pass_action = init_pass_action(&canvas[i]),
-            .tex_pass_action = init_tex_pass_action(),
+            .pass_action = sokol_clear_action(canvas[i].background_color),
+            .tex_pass_action = sokol_clear_action((ecs_rgb_t){0, 0, 0}),
             .pip = init_pipeline(),
             .tex_pip = init_tex_pipeline(),
             .offscreen_tex = offscreen_tex,
             .offscreen_depth_tex = offscreen_depth_tex,
             .offscreen_pass = init_offscreen_pass(offscreen_tex, offscreen_depth_tex),
-            .offscreen_quad = init_quad(),
             .shadow_pass = sokol_init_shadow_pass(SHADOW_MAP_SIZE),
             .fx_bloom = sokol_init_bloom(w, h)
         });
@@ -515,7 +424,7 @@ void SokolSetRenderer(ecs_iter_t *it) {
                 "     ?Prefab")
         });
 
-        sokol_init_buffers(world);
+        sokol_init_geometry(world, &resources);
 
         ecs_trace_1("sokol buffer support initialized");
     }
@@ -550,9 +459,9 @@ void SokolRegisterMaterial(ecs_iter_t *it) {
 
 static
 void draw_instances(
-    SokolRenderer *canvas,
     SokolGeometry *geometry,
-    sokol_instances_t *instances)
+    sokol_instances_t *instances,
+    sg_image shadow_map)
 {
     if (!instances->instance_count) {
         return;
@@ -567,7 +476,7 @@ void draw_instances(
             [4] = instances->transform_buffer
         },
         .index_buffer = geometry->index_buffer,
-        .fs_images[0] = canvas->shadow_pass.color_tex
+        .fs_images[0] = shadow_map
     };
 
     sg_apply_bindings(&bind);
@@ -577,7 +486,7 @@ void draw_instances(
 static
 void SokolRender(ecs_iter_t *it) {
     ecs_world_t *world = it->world;
-    SokolRenderer *sk_canvas = ecs_column(it, SokolRenderer, 1);
+    SokolRenderer *r = ecs_column(it, SokolRenderer, 1);
     EcsCanvas *canvas = ecs_column(it, EcsCanvas, 2);
     EcsQuery *q_buffers = ecs_column(it, EcsQuery, 3);
     EcsQuery *q_mats = ecs_column(it, EcsQuery, 4);
@@ -600,7 +509,7 @@ void SokolRender(ecs_iter_t *it) {
     int32_t i;
     for (i = 0; i < it->count; i ++) {
         int w, h;
-        SDL_GL_GetDrawableSize(sk_canvas[i].sdl_window, &w, &h);
+        SDL_GL_GetDrawableSize(r[i].sdl_window, &w, &h);
         float aspect = (float)w / (float)h;
 
         /* Get light data (if set) */
@@ -612,14 +521,14 @@ void SokolRender(ecs_iter_t *it) {
 
         /* Render shadow map */
         sokol_run_shadow_pass(
-            buffers, &sk_canvas[i].shadow_pass, light_data, vs_u.light_mat_vp);
+            buffers, &r[i].shadow_pass, light_data, vs_u.light_mat_vp);
 
         init_uniforms(world, &canvas[i], aspect, &vs_u, &fs_u,
             ecs_entity(EcsCamera), ecs_entity(EcsDirectionalLight));
 
         /* Render to offscreen texture so screen-space effects can be applied */
-        sg_begin_pass(sk_canvas->offscreen_pass, &sk_canvas->pass_action);
-        sg_apply_pipeline(sk_canvas->pip);
+        sg_begin_pass(r->offscreen_pass, &r->pass_action);
+        sg_apply_pipeline(r->pip);
 
         sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &vs_u, sizeof(vs_uniforms_t));
         sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &fs_u, sizeof(fs_uniforms_t));
@@ -634,23 +543,23 @@ void SokolRender(ecs_iter_t *it) {
 
             int b;
             for (b = 0; b < qit.count; b ++) {
-                draw_instances(sk_canvas, &geometry[b], &geometry[b].solid);
-                draw_instances(sk_canvas, &geometry[b], &geometry[b].emissive);
+                draw_instances(&geometry[b], &geometry[b].solid, r->shadow_pass.color_tex);
+                draw_instances(&geometry[b], &geometry[b].emissive, r->shadow_pass.color_tex);
             }
         }
         sg_end_pass();
 
         /* Apply bloom effect */
         sg_image tex_fx = sokol_effect_run(
-            sk_canvas, &sk_canvas->fx_bloom, sk_canvas->offscreen_tex);
+            &r->resources, &r->fx_bloom, r->offscreen_tex);
 
         /* Render resulting offscreen texture to screen */
-        sg_begin_default_pass(&sk_canvas->tex_pass_action, w, h);
-        sg_apply_pipeline(sk_canvas->tex_pip);
+        sg_begin_default_pass(&r->tex_pass_action, w, h);
+        sg_apply_pipeline(r->tex_pip);
 
         sg_bindings bind = {
             .vertex_buffers = { 
-                [0] = sk_canvas->offscreen_quad 
+                [0] = r->resources.quad 
             },
             .fs_images[0] = tex_fx
         };
@@ -660,7 +569,7 @@ void SokolRender(ecs_iter_t *it) {
         sg_end_pass();
         
         sg_commit();
-        SDL_GL_SwapWindow(sk_canvas->sdl_window);
+        SDL_GL_SwapWindow(r->sdl_window);
     }
 }
 

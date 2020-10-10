@@ -1,15 +1,4 @@
-#include "private_include.h"
-
-static
-const char *vs_fx_shader = 
-    "#version 330\n"
-    "layout(location=0) in vec4 v_position;\n"
-    "layout(location=1) in vec2 v_uv;\n"
-    "out vec2 uv;\n"
-    "void main() {\n"
-    "  gl_Position = v_position;\n"
-    "  uv = v_uv;\n"
-    "}\n";
+#include "private.h"
 
 static
 char* build_fs_shader(
@@ -51,7 +40,7 @@ int sokol_effect_add_pass(
 
     /* Create FX shader */
     sg_shader_desc shd_desc = {
-        .vs.source = vs_fx_shader,
+        .vs.source = sokol_vs_passthrough(),
         .fs.source = fs_shader
     };
 
@@ -127,7 +116,7 @@ int sokol_effect_add_pass(
 
 static
 void effect_pass_draw(
-    SokolRenderer *sk_canvas,
+    sokol_resources_t *res,
     SokolEffect *effect,
     sokol_pass_t *fx_pass,
     sg_image input_0)
@@ -137,7 +126,7 @@ void effect_pass_draw(
     
     sg_bindings bind = {
         .vertex_buffers = { 
-            [0] = sk_canvas->offscreen_quad 
+            [0] = res->quad 
         }
     };
 
@@ -158,13 +147,13 @@ void effect_pass_draw(
 }
 
 sg_image sokol_effect_run(
-    SokolRenderer *sk_canvas,
+    sokol_resources_t *res,
     SokolEffect *effect,
     sg_image input)
 {
     int i;
     for (i = 0; i < effect->pass_count; i ++) {
-        effect_pass_draw(sk_canvas, effect, &effect->pass[i], input);
+        effect_pass_draw(res, effect, &effect->pass[i], input);
     }
 
     return effect->pass[effect->pass_count - 1].output;

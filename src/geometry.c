@@ -1,4 +1,4 @@
-#include "private_include.h"
+#include "private.h"
 
 ECS_CTOR(SokolGeometry, ptr, {
     *ptr = (SokolGeometry) {};
@@ -18,169 +18,98 @@ ECS_DTOR(SokolGeometry, ptr, {
 });
 
 static
-void compute_flat_normals(
-    vec3 *vertices,
-    uint16_t *indices,
-    int32_t count,
-    vec3 *normals_out)
-{
-    int32_t v;
-    for (v = 0; v < count; v += 3) {
-        vec3 vec1, vec2, normal;
-        glm_vec3_sub(vertices[indices[v + 0]], vertices[indices[v + 1]], vec1);
-        glm_vec3_sub(vertices[indices[v + 0]], vertices[indices[v + 2]], vec2);
-        glm_vec3_crossn(vec2, vec1, normal);
-        
-        glm_vec3_copy(normal, normals_out[indices[v + 0]]);
-        glm_vec3_copy(normal, normals_out[indices[v + 1]]);
-        glm_vec3_copy(normal, normals_out[indices[v + 2]]);
+void populate_rectangle(ecs_iter_t *qit, int32_t offset, mat4 *transforms) {
+    EcsRectangle *r = ecs_column(qit, EcsRectangle, 2);
+
+    int i;
+    if (ecs_is_owned(qit, 2)) {
+        for (i = 0; i < qit->count; i ++) {
+            vec3 scale = {r[i].width, r[i].height, 1.0};
+            glm_scale(transforms[offset + i], scale);
+        }
+    } else {
+        vec3 scale = {r->width, r->height, 1.0};
+        for (i = 0; i < qit->count; i ++) {
+            glm_scale(transforms[offset + i], scale);
+        }
     }
 }
 
 static
-void init_rect_buffers(
-    ecs_world_t *world) 
-{
-    ecs_entity_t rect_buf = ecs_lookup_fullpath(
-        world, "flecs.systems.sokol.RectangleGeometry");
-    ecs_assert(rect_buf != 0, ECS_INTERNAL_ERROR, NULL);
-
-    ecs_entity_t sokol_buffer = ecs_lookup_fullpath(
-        world, "flecs.systems.sokol.Geometry");
-    ecs_assert(sokol_buffer != 0, ECS_INTERNAL_ERROR, NULL);
-
-    SokolGeometry *b = ecs_get_mut_w_entity(world, rect_buf, sokol_buffer, NULL);
-    ecs_assert(b != NULL, ECS_INTERNAL_ERROR, NULL);
-
-    vec3 vertices[] = {
-        {-0.5, -0.5, 0.0},
-        { 0.5, -0.5, 0.0},
-        { 0.5,  0.5, 0.0},
-        {-0.5,  0.5, 0.0}
-    };
-
-    uint16_t indices[] = {
-        0, 1, 2,
-        0, 2, 3
-    };
-
-    vec3 normals[6];
-    compute_flat_normals(vertices, indices, 6, normals);
-
-    b->vertex_buffer = sg_make_buffer(&(sg_buffer_desc){
-        .size = sizeof(vertices),
-        .content = vertices,
-        .usage = SG_USAGE_IMMUTABLE
-    });
-
-    b->normal_buffer = sg_make_buffer(&(sg_buffer_desc){
-        .size = sizeof(normals),
-        .content = normals,
-        .usage = SG_USAGE_IMMUTABLE
-    });
-
-    b->index_buffer = sg_make_buffer(&(sg_buffer_desc){
-        .size = sizeof(indices),
-        .content = indices,
-        .type = SG_BUFFERTYPE_INDEXBUFFER,
-        .usage = SG_USAGE_IMMUTABLE
-    });
+void populate_box(ecs_iter_t *qit, int32_t offset, mat4 *transforms) {
+    EcsBox *b = ecs_column(qit, EcsBox, 2);
+    
+    int i;
+    if (ecs_is_owned(qit, 2)) {
+        for (i = 0; i < qit->count; i ++) {
+            vec3 scale = {b[i].width, b[i].height, b[i].depth};
+            glm_scale(transforms[offset + i], scale);
+        }
+    } else {
+        vec3 scale = {b->width, b->height, b->depth};
+        for (i = 0; i < qit->count; i ++) {
+            glm_scale(transforms[offset + i], scale);
+        }
+    }
 }
 
 static
-void init_box_buffers(
-    ecs_world_t *world) 
+void init_rect(
+    ecs_world_t *world,
+    ecs_entity_t geometry,
+    sokol_resources_t *resources) 
 {
-    ecs_entity_t box_buf = ecs_lookup_fullpath(
-        world, "flecs.systems.sokol.BoxGeometry");
-    ecs_assert(box_buf != 0, ECS_INTERNAL_ERROR, NULL);
+    ecs_entity_t rect = ecs_lookup_fullpath(
+        world, "flecs.systems.sokol.RectangleGeometry");
+    ecs_assert(rect != 0, ECS_INTERNAL_ERROR, NULL);
 
-    ecs_entity_t sokol_buffer = ecs_lookup_fullpath(
-        world, "flecs.systems.sokol.Geometry");
-    ecs_assert(sokol_buffer != 0, ECS_INTERNAL_ERROR, NULL);
+    SokolGeometry *g = ecs_get_mut_w_entity(world, rect, geometry, NULL);
+    ecs_assert(g != NULL, ECS_INTERNAL_ERROR, NULL);
 
-    SokolGeometry *b = ecs_get_mut_w_entity(world, box_buf, sokol_buffer, NULL);
-    ecs_assert(b != NULL, ECS_INTERNAL_ERROR, NULL);
-
-    vec3 vertices[] = {
-        {-0.5f, -0.5f, -0.5f}, // Back   
-        { 0.5f, -0.5f, -0.5f},    
-        { 0.5f,  0.5f, -0.5f},    
-        {-0.5f,  0.5f, -0.5f},  
-
-        {-0.5f, -0.5f,  0.5f}, // Front  
-        { 0.5f, -0.5f,  0.5f},    
-        { 0.5f,  0.5f,  0.5f},    
-        {-0.5f,  0.5f,  0.5f}, 
-
-        {-0.5f, -0.5f, -0.5f}, // Left   
-        {-0.5f,  0.5f, -0.5f},    
-        {-0.5f,  0.5f,  0.5f},    
-        {-0.5f, -0.5f,  0.5f},    
-
-        { 0.5f, -0.5f, -0.5f}, // Right   
-        { 0.5f,  0.5f, -0.5f},    
-        { 0.5f,  0.5f,  0.5f},    
-        { 0.5f, -0.5f,  0.5f},    
-
-        {-0.5f, -0.5f, -0.5f}, // Bottom   
-        {-0.5f, -0.5f,  0.5f},    
-        { 0.5f, -0.5f,  0.5f},    
-        { 0.5f, -0.5f, -0.5f},    
-
-        {-0.5f,  0.5f, -0.5f}, // Top   
-        {-0.5f,  0.5f,  0.5f},    
-        { 0.5f,  0.5f,  0.5f},    
-        { 0.5f,  0.5f, -0.5f},    
-    };
-
-    b->vertex_buffer = sg_make_buffer(&(sg_buffer_desc){
-        .size = sizeof(vertices),
-        .content = vertices,
-        .usage = SG_USAGE_IMMUTABLE
-    });
-
-    uint16_t indices[] = {
-        0,  1,  2,   0,  2,  3,
-        6,  5,  4,   7,  6,  4,
-        8,  9,  10,  8,  10, 11,
-        14, 13, 12,  15, 14, 12,
-        16, 17, 18,  16, 18, 19,
-        22, 21, 20,  23, 22, 20,
-    };
-
-    b->index_buffer = sg_make_buffer(&(sg_buffer_desc){
-        .size = sizeof(indices),
-        .content = indices,
-        .type = SG_BUFFERTYPE_INDEXBUFFER,
-        .usage = SG_USAGE_IMMUTABLE
-    });    
-
-    vec3 normals[24];
-    compute_flat_normals(vertices, indices, 36, normals);
-
-    b->normal_buffer = sg_make_buffer(&(sg_buffer_desc){
-        .size = sizeof(normals),
-        .content = normals,
-        .usage = SG_USAGE_IMMUTABLE
-    });
-
-    b->index_count = 36;
+    g->vertex_buffer = resources->rect;
+    g->normal_buffer = resources->rect_normals;
+    g->index_buffer = resources->rect_indices;
+    g->index_count = sokol_rectangle_index_count();
+    g->populate = populate_rectangle;
 }
 
-void sokol_init_buffers(
-    ecs_world_t *world) 
+static
+void init_box(
+    ecs_world_t *world,
+    ecs_entity_t geometry,
+    sokol_resources_t *resources) 
 {
-    init_rect_buffers(world);
-    init_box_buffers(world);
+    ecs_entity_t box = ecs_lookup_fullpath(
+        world, "flecs.systems.sokol.BoxGeometry");
+    ecs_assert(box != 0, ECS_INTERNAL_ERROR, NULL);
+
+    SokolGeometry *g = ecs_get_mut_w_entity(world, box, geometry, NULL);
+    ecs_assert(g != NULL, ECS_INTERNAL_ERROR, NULL);
+
+    g->vertex_buffer = resources->box;
+    g->normal_buffer = resources->box_normals;
+    g->index_buffer = resources->box_indices;
+    g->index_count = sokol_box_index_count();
+    g->populate = populate_box;
+}
+
+void sokol_init_geometry(
+    ecs_world_t *world,
+    sokol_resources_t *resources) 
+{
+    ecs_entity_t geometry = ecs_lookup_fullpath(
+        world, "flecs.systems.sokol.Geometry");
+    ecs_assert(geometry != 0, ECS_INTERNAL_ERROR, NULL);
+    
+    init_rect(world, geometry, resources);
+    init_box(world, geometry, resources);
 }
 
 static
 void populate_buffer(
     SokolGeometry *geometry,
     sokol_instances_t *instances,
-    ecs_query_t *query,
-    sokol_geometry_action_t populate)
+    ecs_query_t *query)
 {
     if (ecs_query_changed(query)) {
         ecs_iter_t qit = ecs_query_iter(query);
@@ -248,7 +177,7 @@ void populate_buffer(
                 }
 
                 memcpy(&transforms[cursor], t, qit.count * sizeof(mat4));
-                populate(&qit, cursor, transforms);
+                geometry->populate(&qit, cursor, transforms);
                 cursor += qit.count;
             }
 
@@ -301,42 +230,6 @@ void populate_buffer(
 }
 
 static
-void populate_rectangle(ecs_iter_t *qit, int32_t offset, mat4 *transforms) {
-    EcsRectangle *r = ecs_column(qit, EcsRectangle, 2);
-
-    int i;
-    if (ecs_is_owned(qit, 2)) {
-        for (i = 0; i < qit->count; i ++) {
-            vec3 scale = {r[i].width, r[i].height, 1.0};
-            glm_scale(transforms[offset + i], scale);
-        }
-    } else {
-        vec3 scale = {r->width, r->height, 1.0};
-        for (i = 0; i < qit->count; i ++) {
-            glm_scale(transforms[offset + i], scale);
-        }
-    }
-}
-
-static
-void populate_box(ecs_iter_t *qit, int32_t offset, mat4 *transforms) {
-    EcsBox *b = ecs_column(qit, EcsBox, 2);
-    
-    int i;
-    if (ecs_is_owned(qit, 2)) {
-        for (i = 0; i < qit->count; i ++) {
-            vec3 scale = {b[i].width, b[i].height, b[i].depth};
-            glm_scale(transforms[offset + i], scale);
-        }
-    } else {
-        vec3 scale = {b->width, b->height, b->depth};
-        for (i = 0; i < qit->count; i ++) {
-            glm_scale(transforms[offset + i], scale);
-        }
-    }
-}
-
-static
 void SokolPopulateGeometry(
     ecs_iter_t *it) 
 {
@@ -345,9 +238,9 @@ void SokolPopulateGeometry(
 
     int i;
     for (i = 0; i < it->count; i ++) {
-        populate_buffer(&g[i], &g[i].solid, q[i].solid, q[i].populate);
-        populate_buffer(&g[i], &g[i].emissive, q[i].emissive, q[i].populate);
-        populate_buffer(&g[i], &g[i].transparent, q[i].transparent, q[i].populate);
+        populate_buffer(&g[i], &g[i].solid, q[i].solid);
+        populate_buffer(&g[i], &g[i].emissive, q[i].emissive);
+        populate_buffer(&g[i], &g[i].transparent, q[i].transparent);
     }
 }
 
@@ -422,15 +315,13 @@ void FlecsSystemsSokolGeometryImport(
     /* Support for rectangle primitive */
     ECS_ENTITY(world, SokolRectangleGeometry, Geometry);
         ecs_set(world, SokolRectangleGeometry, SokolGeometryQuery, {
-            .component = ecs_entity(EcsRectangle),
-            .populate = populate_rectangle
+            .component = ecs_entity(EcsRectangle)
         });
 
     /* Support for box primitive */
     ECS_ENTITY(world, SokolBoxGeometry, Geometry);
         ecs_set(world, SokolBoxGeometry, SokolGeometryQuery, {
-            .component = ecs_entity(EcsBox),
-            .populate = populate_box
+            .component = ecs_entity(EcsBox)
         });
 
     /* Create system that manages buffers for rectangles */

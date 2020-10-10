@@ -1,4 +1,4 @@
-#include "private_include.h"
+#include "private.h"
 
 typedef struct vs_uniforms_t {
     mat4 mat_vp;
@@ -35,7 +35,7 @@ static const char *shd_f =
 sokol_shadow_pass_t sokol_init_shadow_pass(
     int size)
 {
-    sokol_shadow_pass_t result = {0};
+    sokol_shadow_pass_t result = {};
 
     result.pass_action  = (sg_pass_action) {
         .colors[0] = { 
@@ -44,8 +44,8 @@ sokol_shadow_pass_t sokol_init_shadow_pass(
         }
     };
 
-    result.depth_tex = sokol_init_render_depth_target(size, size);
-    result.color_tex = sokol_init_render_target_8(size, size);
+    result.depth_tex = sokol_target_depth(size, size);
+    result.color_tex = sokol_target_rgba8(size, size);
 
     result.pass = sg_make_pass(&(sg_pass_desc){
         .color_attachments[0].image = result.color_tex,

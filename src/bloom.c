@@ -1,4 +1,4 @@
-#include "private_include.h"
+#include "private.h"
 
 static
 const char *shd_threshold =
@@ -53,7 +53,7 @@ const char *shd_blend =
 SokolEffect sokol_init_bloom(
     int width, int height)
 {
-    SokolEffect fx = {0};
+    SokolEffect fx = {};
     int blur_w = width * 0.2;
     int blur_h = height * 0.2;
 
