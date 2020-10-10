@@ -2,84 +2,6 @@
 #include "private.h"
 
 static
-sg_pipeline init_screen_pipeline() {
-    sg_shader shd = sg_make_shader(&(sg_shader_desc){
-        .vs.source = sokol_vs_passthrough(),
-        .fs = {
-            .source =
-                "#version 330\n"
-                "uniform sampler2D tex;\n"
-                "out vec4 frag_color;\n"
-                "in vec2 uv;\n"
-                "void main() {\n"
-                "  frag_color = texture(tex, uv);\n"
-                "}\n"
-                ,
-            .images[0] = {
-                .name = "screen",
-                .type = SG_IMAGETYPE_2D
-            }
-        }
-    });
-
-    /* create a pipeline object (default render state is fine) */
-    return sg_make_pipeline(&(sg_pipeline_desc){
-        .shader = shd,
-        .layout = {         
-            .attrs = {
-                /* Static geometry (position, uv) */
-                [0] = { .buffer_index=0, .format=SG_VERTEXFORMAT_FLOAT3 },
-                [1] = { .buffer_index=0, .format=SG_VERTEXFORMAT_FLOAT2 }
-            }
-        },
-        .depth_stencil = {
-            .depth_compare_func = SG_COMPAREFUNC_LESS_EQUAL,
-            .depth_write_enabled = false
-        }
-    });
-}
-
-static
-void init_materials(
-    ecs_query_t *mat_q, 
-    sokol_vs_materials_t *mat_u)
-{
-    ecs_iter_t qit = ecs_query_iter(mat_q);
-    while (ecs_query_next(&qit)) {
-        SokolMaterial *mat = ecs_column(&qit, SokolMaterial, 1);
-        EcsSpecular *spec = ecs_column(&qit, EcsSpecular, 2);
-        EcsEmissive *em = ecs_column(&qit, EcsEmissive, 3);
-
-        int i;
-        if (spec) {
-            for (i = 0; i < qit.count; i ++) {
-                uint16_t id = mat[i].material_id;
-                mat_u->array[id].specular_power = spec[i].specular_power;
-                mat_u->array[id].shininess = spec[i].shininess;
-            }
-        } else {
-            for (i = 0; i < qit.count; i ++) {
-                uint16_t id = mat[i].material_id;
-                mat_u->array[id].specular_power = 0;
-                mat_u->array[id].shininess = 0;
-            }            
-        }
-
-        if (em) {
-            for (i = 0; i < qit.count; i ++) {
-                uint16_t id = mat[i].material_id;
-                mat_u->array[id].emissive = em[i].value;
-            }
-        } else {
-            for (i = 0; i < qit.count; i ++) {
-                uint16_t id = mat[i].material_id;
-                mat_u->array[id].emissive = 0;
-            }
-        }
-    }    
-}
-
-static
 sokol_resources_t init_resources(void) {
     return (sokol_resources_t){
         .quad = sokol_buffer_quad(),
@@ -91,14 +13,6 @@ sokol_resources_t init_resources(void) {
         .box = sokol_buffer_box(),
         .box_indices = sokol_buffer_box_indices(),
         .box_normals = sokol_buffer_box_normals()
-    };
-}
-
-static
-sokol_screen_pass_t init_screen_pass(void) {
-    return (sokol_screen_pass_t){
-        .pass_action = sokol_clear_action((ecs_rgb_t){0, 0, 0}),
-        .pip = init_screen_pipeline()
     };
 }
 
@@ -122,14 +36,14 @@ void SokolSetRenderer(ecs_iter_t *it) {
         ecs_trace_1("sokol initialized");
 
         sokol_resources_t resources = init_resources();
-        
+
         ecs_set(world, it->entities[i], SokolRenderer, {
             .resources = resources,
             .sdl_window = sdl_window,
             .gl_context = ctx,
-            .shadow_pass = sokol_init_shadow_pass(SOKOL_SHADOW_MAP_SIZE),
             .scene_pass = sokol_init_scene_pass(canvas[i].background_color, w, h),
-            .screen_pass = init_screen_pass(),
+            .shadow_pass = sokol_init_shadow_pass(SOKOL_SHADOW_MAP_SIZE),
+            .screen_pass = sokol_init_screen_pass(),
             .fx_bloom = sokol_init_bloom(w, h)
         });
 
@@ -181,7 +95,47 @@ void SokolRegisterMaterial(ecs_iter_t *it) {
 }
 
 static
-void init_light_vp(
+void init_materials(
+    ecs_query_t *mat_q, 
+    sokol_vs_materials_t *mat_u)
+{
+    ecs_iter_t qit = ecs_query_iter(mat_q);
+    while (ecs_query_next(&qit)) {
+        SokolMaterial *mat = ecs_column(&qit, SokolMaterial, 1);
+        EcsSpecular *spec = ecs_column(&qit, EcsSpecular, 2);
+        EcsEmissive *em = ecs_column(&qit, EcsEmissive, 3);
+
+        int i;
+        if (spec) {
+            for (i = 0; i < qit.count; i ++) {
+                uint16_t id = mat[i].material_id;
+                mat_u->array[id].specular_power = spec[i].specular_power;
+                mat_u->array[id].shininess = spec[i].shininess;
+            }
+        } else {
+            for (i = 0; i < qit.count; i ++) {
+                uint16_t id = mat[i].material_id;
+                mat_u->array[id].specular_power = 0;
+                mat_u->array[id].shininess = 0;
+            }            
+        }
+
+        if (em) {
+            for (i = 0; i < qit.count; i ++) {
+                uint16_t id = mat[i].material_id;
+                mat_u->array[id].emissive = em[i].value;
+            }
+        } else {
+            for (i = 0; i < qit.count; i ++) {
+                uint16_t id = mat[i].material_id;
+                mat_u->array[id].emissive = 0;
+            }
+        }
+    }    
+}
+
+static
+void init_light_mat_vp(
     sokol_render_state_t *state)
 {
     mat4 mat_p;
@@ -219,24 +173,20 @@ void SokolRender(ecs_iter_t *it) {
     EcsQuery *q_mats = ecs_column(it, EcsQuery, 4);
     ecs_entity_t ecs_entity(EcsCamera) = ecs_column_entity(it, 5);
     ecs_entity_t ecs_entity(EcsDirectionalLight) = ecs_column_entity(it, 6);
-
-    ecs_query_t *q_geometry = q_buffers->query;
+    sokol_render_state_t state = {};
     sokol_vs_materials_t mat_u = {};
 
-    /* Update material buffer when changed */
-    bool set_mat = false;
+    bool mat_set = false;
     if (ecs_query_changed(q_mats->query)) {
         init_materials(q_mats->query, &mat_u);
-        set_mat = true;
+        mat_set = true;
     }
 
-    /* Loop each canvas */
     int32_t i;
     for (i = 0; i < it->count; i ++) {
-        sokol_render_state_t state = {};
         SDL_GL_GetDrawableSize(r[i].sdl_window, &state.width, &state.height);
         state.aspect = (float)state.width / (float)state.height;
-        state.q_scene = q_geometry;
+        state.q_scene = q_buffers->query;
         state.ambient_light = canvas[i].ambient_light;
         state.shadow_map = r[i].shadow_pass.color_target;
 
@@ -248,32 +198,16 @@ void SokolRender(ecs_iter_t *it) {
         ecs_entity_t light = canvas[i].directional_light;
         if (light) {
             state.light = ecs_get(world, light, EcsDirectionalLight);
-            init_light_vp(&state);
-            
-            /* Render shadow map only when we have a light */
-            sokol_run_shadow_pass(&r[i].shadow_pass, &state);
+            init_light_mat_vp(&state);
+            sokol_run_shadow_pass(&r[i].shadow_pass, &state);            
         }
 
-        sokol_run_scene_pass(&r[i].scene_pass, &state, set_mat ? &mat_u : NULL);
+        sokol_run_scene_pass(&r[i].scene_pass, &state, mat_set ? &mat_u : NULL);
 
-        /* Apply bloom effect */
         sg_image target = sokol_effect_run(
             &r->resources, &r->fx_bloom, r->scene_pass.color_target);
 
-        /* Render resulting offscreen texture to screen */
-        sg_begin_default_pass(&r->screen_pass.pass_action, state.width, state.height);
-        sg_apply_pipeline(r->screen_pass.pip);
-
-        sg_bindings bind = {
-            .vertex_buffers = { 
-                [0] = r->resources.quad 
-            },
-            .fs_images[0] = target
-        };
-
-        sg_apply_bindings(&bind);
-        sg_draw(0, 6, 1);
-        sg_end_pass();
+        sokol_run_screen_pass(&r->screen_pass, &r->resources, &state, target);
         
         sg_commit();
         SDL_GL_SwapWindow(r->sdl_window);

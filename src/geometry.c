@@ -187,11 +187,7 @@ void populate_buffer(
             instances->instance_count = count;
 
             if (count > instance_max) {
-                if (instance_max) {
-                    /* Make sure buffers are no longer in use (I think- without
-                     * this OpenGL complains) */
-                    sg_reset_state_cache();
-                    
+                if (instance_max) {                    
                     sg_destroy_buffer(instances->color_buffer);
                     sg_destroy_buffer(instances->transform_buffer);
                     sg_destroy_buffer(instances->material_buffer);

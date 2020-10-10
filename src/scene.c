@@ -283,6 +283,7 @@ void sokol_run_scene_pass(
 {
     vs_uniforms_t vs_u;
     fs_uniforms_t fs_u;
+    glm_mat4_copy(state->light_mat_vp, vs_u.light_mat_vp);
     init_uniforms(state, &vs_u, &fs_u);
 
     /* Render to offscreen texture so screen-space effects can be applied */

@@ -123,7 +123,7 @@ void draw_instances(
 
 void sokol_run_shadow_pass(
     sokol_offscreen_pass_t *pass,
-    sokol_render_state_t *state)
+    sokol_render_state_t *state) 
 {
     /* Render to offscreen texture so screen-space effects can be applied */
     sg_begin_pass(pass->pass, &pass->pass_action);
@@ -144,5 +144,5 @@ void sokol_run_shadow_pass(
             draw_instances(&geometry[b], &geometry[b].solid);
         }
     }
-    sg_end_pass();
+    sg_end_pass();   
 }
