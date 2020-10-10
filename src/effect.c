@@ -127,7 +127,7 @@ int sokol_effect_add_pass(
 
 static
 void effect_pass_draw(
-    SokolCanvas *sk_canvas,
+    SokolRenderer *sk_canvas,
     SokolEffect *effect,
     sokol_pass_t *fx_pass,
     sg_image input_0)
@@ -158,7 +158,7 @@ void effect_pass_draw(
 }
 
 sg_image sokol_effect_run(
-    SokolCanvas *sk_canvas,
+    SokolRenderer *sk_canvas,
     SokolEffect *effect,
     sg_image input)
 {

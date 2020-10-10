@@ -53,7 +53,7 @@ typedef struct SokolMaterial {
     uint16_t material_id;
 } SokolMaterial;
 
-typedef struct SokolCanvas {
+typedef struct SokolRenderer {
     SDL_Window* sdl_window;
     SDL_GLContext gl_context;
 	sg_pass_action pass_action;
@@ -71,9 +71,9 @@ typedef struct SokolCanvas {
     SokolEffect fx_bloom;
 
     sg_pipeline tex_pip;
-} SokolCanvas;
+} SokolRenderer;
 
-#include "buffer.h"
+#include "geometry.h"
 #include "effect.h"
 
 SokolEffect sokol_init_bloom(

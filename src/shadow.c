@@ -132,6 +132,26 @@ void init_uniforms(
     glm_mat4_mul(mat_p, mat_v, vs_out->mat_vp);
 }
 
+static
+void draw_instances(
+    SokolGeometry *geometry,
+    sokol_instances_t *instances)
+{
+    if (!instances->instance_count) {
+        return;
+    }
+
+    sg_bindings bind = {
+        .vertex_buffers = {
+            [0] = geometry->vertex_buffer,
+            [1] = instances->transform_buffer
+        },
+        .index_buffer = geometry->index_buffer
+    };
+    sg_apply_bindings(&bind);
+    sg_draw(0, geometry->index_count, instances->instance_count);    
+}
+
 void sokol_run_shadow_pass(
     ecs_query_t *buffers,
     sokol_shadow_pass_t *pass,
@@ -144,28 +164,17 @@ void sokol_run_shadow_pass(
 
     vs_uniforms_t vs_u;
     init_uniforms(light_data, &vs_u);
+    sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &vs_u, sizeof(vs_uniforms_t));
 
     /* Loop buffers, render scene */
     ecs_iter_t qit = ecs_query_iter(buffers);
     while (ecs_query_next(&qit)) {
-        SokolBuffer *buffer = ecs_column(&qit, SokolBuffer, 1);
+        SokolGeometry *geometry = ecs_column(&qit, SokolGeometry, 1);
         
         int b;
         for (b = 0; b < qit.count; b ++) {
-            if (!buffer[b].instance_count) {
-                continue;
-            }
-            sg_bindings bind = {
-                .vertex_buffers = {
-                    [0] = buffer[b].vertex_buffer,
-                    [1] = buffer[b].transform_buffer
-                },
-                .index_buffer = buffer[b].index_buffer
-            };
-
-            sg_apply_bindings(&bind);
-            sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &vs_u, sizeof(vs_uniforms_t));
-            sg_draw(0, buffer[b].index_count, buffer[b].instance_count);
+            /* Only draw solids, ignore emissive and transparent (for now) */
+            draw_instances(&geometry[b], &geometry[b].solid);
         }
     }
     sg_end_pass();

@@ -1,25 +1,20 @@
 #include "private_include.h"
 
-ECS_CTOR(SokolBuffer, ptr, {
-    ptr->vertex_buffer = (sg_buffer){ 0 };
-    ptr->index_buffer = (sg_buffer){ 0 };
-    ptr->color_buffer = (sg_buffer){ 0 };
-    ptr->transform_buffer = (sg_buffer){ 0 };
-    ptr->material_buffer = (sg_buffer){ 0 };
-
-    ptr->colors = NULL;
-    ptr->transforms = NULL;
-    ptr->materials = NULL;
-
-    ptr->instance_count = 0;
-    ptr->instance_max = 0;
-    ptr->index_count = 0;
+ECS_CTOR(SokolGeometry, ptr, {
+    *ptr = (SokolGeometry) {};
 });
 
-ECS_DTOR(SokolBuffer, ptr, {
-    ecs_os_free(ptr->colors);
-    ecs_os_free(ptr->transforms);
-    ecs_os_free(ptr->materials);
+static 
+void free_buffer(sokol_instances_t *b) {
+    ecs_os_free(b->colors);
+    ecs_os_free(b->transforms);
+    ecs_os_free(b->materials);
+}
+
+ECS_DTOR(SokolGeometry, ptr, {
+    free_buffer(&ptr->solid);
+    free_buffer(&ptr->emissive);
+    free_buffer(&ptr->transparent);
 });
 
 static
@@ -47,14 +42,14 @@ void init_rect_buffers(
     ecs_world_t *world) 
 {
     ecs_entity_t rect_buf = ecs_lookup_fullpath(
-        world, "flecs.systems.sokol.RectangleBuffer");
+        world, "flecs.systems.sokol.RectangleGeometry");
     ecs_assert(rect_buf != 0, ECS_INTERNAL_ERROR, NULL);
 
     ecs_entity_t sokol_buffer = ecs_lookup_fullpath(
-        world, "flecs.systems.sokol.Buffer");
+        world, "flecs.systems.sokol.Geometry");
     ecs_assert(sokol_buffer != 0, ECS_INTERNAL_ERROR, NULL);
 
-    SokolBuffer *b = ecs_get_mut_w_entity(world, rect_buf, sokol_buffer, NULL);
+    SokolGeometry *b = ecs_get_mut_w_entity(world, rect_buf, sokol_buffer, NULL);
     ecs_assert(b != NULL, ECS_INTERNAL_ERROR, NULL);
 
     vec3 vertices[] = {
@@ -90,8 +85,6 @@ void init_rect_buffers(
         .type = SG_BUFFERTYPE_INDEXBUFFER,
         .usage = SG_USAGE_IMMUTABLE
     });
-
-    b->index_count = 6;
 }
 
 static
@@ -99,14 +92,14 @@ void init_box_buffers(
     ecs_world_t *world) 
 {
     ecs_entity_t box_buf = ecs_lookup_fullpath(
-        world, "flecs.systems.sokol.BoxBuffer");
+        world, "flecs.systems.sokol.BoxGeometry");
     ecs_assert(box_buf != 0, ECS_INTERNAL_ERROR, NULL);
 
     ecs_entity_t sokol_buffer = ecs_lookup_fullpath(
-        world, "flecs.systems.sokol.Buffer");
+        world, "flecs.systems.sokol.Geometry");
     ecs_assert(sokol_buffer != 0, ECS_INTERNAL_ERROR, NULL);
 
-    SokolBuffer *b = ecs_get_mut_w_entity(world, box_buf, sokol_buffer, NULL);
+    SokolGeometry *b = ecs_get_mut_w_entity(world, box_buf, sokol_buffer, NULL);
     ecs_assert(b != NULL, ECS_INTERNAL_ERROR, NULL);
 
     vec3 vertices[] = {
@@ -183,21 +176,15 @@ void sokol_init_buffers(
 }
 
 static
-void attach_buffer(
-    ecs_iter_t *it, 
-    void(*action)(
-        ecs_iter_t* q, 
-        int32_t offset, 
-        mat4 *transforms)) 
+void populate_buffer(
+    SokolGeometry *geometry,
+    sokol_instances_t *instances,
+    ecs_query_t *query,
+    sokol_geometry_action_t populate)
 {
-    EcsQuery *q = ecs_column(it, EcsQuery, 1);
-
-    ecs_query_t *query = q->query;
-
     if (ecs_query_changed(query)) {
-        SokolBuffer *b = ecs_column(it, SokolBuffer, 2);
         ecs_iter_t qit = ecs_query_iter(query);
-        
+
         /* Count number of instances to ensure GPU buffers are big enough */
         int32_t count = 0;
         while (ecs_query_next(&qit)) {
@@ -205,19 +192,19 @@ void attach_buffer(
         }
 
         if (!count) {
-            b->instance_count = 0;
+            instances->instance_count = 0;
         } else {
             /* Make sure application buffers are large enough */
-            ecs_rgba_t *colors = b->colors;
-            mat4 *transforms = b->transforms;
-            uint32_t *materials = b->materials;
+            ecs_rgba_t *colors = instances->colors;
+            mat4 *transforms = instances->transforms;
+            uint32_t *materials = instances->materials;
 
             int colors_size = count * sizeof(ecs_rgba_t);
             int transforms_size = count * sizeof(EcsTransform3);
             int materials_size = count * sizeof(uint32_t);
 
-            int32_t instance_count = b->instance_count;
-            int32_t instance_max = b->instance_max;
+            int32_t instance_count = instances->instance_count;
+            int32_t instance_max = instances->instance_max;
 
             if (instance_count < count) {
                 colors = ecs_os_realloc(colors, colors_size);
@@ -232,14 +219,22 @@ void attach_buffer(
             ecs_iter_t qit = ecs_query_iter(query);
             while (ecs_query_next(&qit)) {
                 EcsTransform3 *t = ecs_column(&qit, EcsTransform3, 1);
-                EcsColor *c = ecs_column(&qit, EcsColor, 3);
-                SokolMaterial *mat = ecs_column(&qit, SokolMaterial, 4);
+                SokolMaterial *mat = ecs_column(&qit, SokolMaterial, 3);
+                EcsRgb *c = ecs_column(&qit, EcsRgb, 4);
 
-                if (ecs_is_owned(&qit, 3)) {
-                    memcpy(&colors[cursor], c, qit.count * sizeof(ecs_rgba_t));
+                if (ecs_is_owned(&qit, 4)) {
+                    for (i = 0; i < qit.count; i ++) {
+                        colors[cursor + i].r = c[i].value.r;
+                        colors[cursor + i].g = c[i].value.g;
+                        colors[cursor + i].b = c[i].value.b;
+                        colors[cursor + i].a = 0;
+                    }
                 } else {
                     for (i = 0; i < qit.count; i ++) {
-                        memcpy(&colors[cursor + i], c, sizeof(ecs_rgba_t));
+                        colors[cursor + i].r = c->value.r;
+                        colors[cursor + i].g = c->value.g;
+                        colors[cursor + i].b = c->value.b;
+                        colors[cursor + i].a = 0;
                     }
                 }
 
@@ -253,14 +248,14 @@ void attach_buffer(
                 }
 
                 memcpy(&transforms[cursor], t, qit.count * sizeof(mat4));
-                action(&qit, cursor, transforms);
+                populate(&qit, cursor, transforms);
                 cursor += qit.count;
             }
 
-            b->colors = colors;
-            b->transforms = transforms;
-            b->materials = materials;
-            b->instance_count = count;
+            instances->colors = colors;
+            instances->transforms = transforms;
+            instances->materials = materials;
+            instances->instance_count = count;
 
             if (count > instance_max) {
                 if (instance_max) {
@@ -268,9 +263,9 @@ void attach_buffer(
                      * this OpenGL complains) */
                     sg_reset_state_cache();
                     
-                    sg_destroy_buffer(b->color_buffer);
-                    sg_destroy_buffer(b->transform_buffer);
-                    sg_destroy_buffer(b->material_buffer);
+                    sg_destroy_buffer(instances->color_buffer);
+                    sg_destroy_buffer(instances->transform_buffer);
+                    sg_destroy_buffer(instances->material_buffer);
                 }
 
                 while (count > instance_max) {
@@ -280,33 +275,33 @@ void attach_buffer(
                     instance_max *= 2;
                 }
 
-                b->color_buffer = sg_make_buffer(&(sg_buffer_desc){
+                instances->color_buffer = sg_make_buffer(&(sg_buffer_desc){
                     .size = instance_max * sizeof(ecs_rgba_t),
                     .usage = SG_USAGE_STREAM
                 });
 
-                b->transform_buffer = sg_make_buffer(&(sg_buffer_desc){
+                instances->transform_buffer = sg_make_buffer(&(sg_buffer_desc){
                     .size = instance_max * sizeof(EcsTransform3),
                     .usage = SG_USAGE_STREAM
                 });
 
-                b->material_buffer = sg_make_buffer(&(sg_buffer_desc){
+                instances->material_buffer = sg_make_buffer(&(sg_buffer_desc){
                     .size = instance_max * sizeof(uint32_t),
                     .usage = SG_USAGE_STREAM
                 });
 
-                b->instance_max = instance_max;
+                instances->instance_max = instance_max;
             }
 
-            sg_update_buffer(b->color_buffer, colors, colors_size);
-            sg_update_buffer(b->transform_buffer, transforms, transforms_size);
-            sg_update_buffer(b->material_buffer, materials, materials_size);
+            sg_update_buffer(instances->color_buffer, colors, colors_size);
+            sg_update_buffer(instances->transform_buffer, transforms, transforms_size);
+            sg_update_buffer(instances->material_buffer, materials, materials_size);
         }
     }
 }
 
 static
-void attach_rect(ecs_iter_t *qit, int32_t offset, mat4 *transforms) {
+void populate_rectangle(ecs_iter_t *qit, int32_t offset, mat4 *transforms) {
     EcsRectangle *r = ecs_column(qit, EcsRectangle, 2);
 
     int i;
@@ -324,7 +319,7 @@ void attach_rect(ecs_iter_t *qit, int32_t offset, mat4 *transforms) {
 }
 
 static
-void attach_box(ecs_iter_t *qit, int32_t offset, mat4 *transforms) {
+void populate_box(ecs_iter_t *qit, int32_t offset, mat4 *transforms) {
     EcsBox *b = ecs_column(qit, EcsBox, 2);
     
     int i;
@@ -342,19 +337,66 @@ void attach_box(ecs_iter_t *qit, int32_t offset, mat4 *transforms) {
 }
 
 static
-void SokolAttachRect(ecs_iter_t *it) {
-    attach_buffer(it, attach_rect);
+void SokolPopulateGeometry(
+    ecs_iter_t *it) 
+{
+    SokolGeometry *g = ecs_column(it, SokolGeometry, 1);
+    SokolGeometryQuery *q = ecs_column(it, SokolGeometryQuery, 2);
+
+    int i;
+    for (i = 0; i < it->count; i ++) {
+        populate_buffer(&g[i], &g[i].solid, q[i].solid, q[i].populate);
+        populate_buffer(&g[i], &g[i].emissive, q[i].emissive, q[i].populate);
+        populate_buffer(&g[i], &g[i].transparent, q[i].transparent, q[i].populate);
+    }
 }
 
-static
-void SokolAttachBox(ecs_iter_t *it) {
-    attach_buffer(it, attach_box);
+static 
+void CreateGeometryQueries(ecs_iter_t *it) {
+    ecs_world_t *world = it->world;
+    SokolGeometryQuery *sb = ecs_column(it, SokolGeometryQuery, 1);
+
+    int i;
+    for (i = 0; i < it->count; i ++) {
+        char *comp_path = ecs_get_fullpath(world, sb[i].component);
+        char expr[255], subexpr[512];
+        sprintf(expr, 
+            "[in] flecs.components.transform.Transform3,"
+            "[in] ANY:%s,"
+            "[in] ?SHARED:flecs.systems.sokol.Material",
+                comp_path);
+        ecs_os_free(comp_path);
+
+        sb[i].parent_query = ecs_query_new(world, expr);
+
+        sprintf(subexpr, 
+            "%s,"
+            "[in] ANY:flecs.components.graphics.Rgb,"
+            "[in] !SHARED:flecs.components.graphics.Emissive,"
+            "[in] !ANY:flecs.components.graphics.Rgba", 
+                expr);
+        sb[i].solid = ecs_subquery_new(world, sb[i].parent_query, subexpr);
+
+        sprintf(subexpr, 
+            "%s,"
+            "[in] ANY:flecs.components.graphics.Rgb,"
+            "[in] SHARED:flecs.components.graphics.Emissive,"
+            "[in] !ANY:flecs.components.graphics.Rgba", expr);
+        sb[i].emissive = ecs_subquery_new(world, sb[i].parent_query, subexpr);
+
+        sprintf(subexpr,
+            "%s,"
+            "[in] !ANY:flecs.components.graphics.Rgb,"
+            "[in] ANY:flecs.components.graphics.Emissive,"
+            "[in] ANY:flecs.components.graphics.Rgba", expr);
+        sb[i].transparent = ecs_subquery_new(world, sb[i].parent_query, subexpr);
+    }
 }
 
-void FlecsSystemsSokolBufferImport(
+void FlecsSystemsSokolGeometryImport(
     ecs_world_t *world)
 {
-    ECS_MODULE(world, FlecsSystemsSokolBuffer);
+    ECS_MODULE(world, FlecsSystemsSokolGeometry);
 
     /* Store components in parent sokol scope */
     ecs_entity_t scope = ecs_lookup_fullpath(world, "flecs.systems.sokol");
@@ -366,48 +408,32 @@ void FlecsSystemsSokolBufferImport(
 
     ecs_set_name_prefix(world, "Sokol");
 
-    ECS_COMPONENT(world, SokolBuffer);
+    ECS_COMPONENT(world, SokolGeometry);
+    ECS_COMPONENT(world, SokolGeometryQuery);
 
-    ecs_set_component_actions(world, SokolBuffer, {
-        .ctor = ecs_ctor(SokolBuffer),
-        .dtor = ecs_dtor(SokolBuffer)
-    });    
+    ecs_set_component_actions(world, SokolGeometry, {
+        .ctor = ecs_ctor(SokolGeometry),
+        .dtor = ecs_dtor(SokolGeometry)
+    });
+
+    /* Create queries for solid, emissive and transparent */
+    ECS_SYSTEM(world, CreateGeometryQueries, EcsOnSet, GeometryQuery);
 
     /* Support for rectangle primitive */
-
-    ECS_ENTITY(world, SokolRectangleBuffer,
-        Buffer, flecs.system.Query);
-
-        /* Create query for rectangles */
-        ecs_set(world, SokolRectangleBuffer, EcsQuery, {
-            ecs_query_new(world, 
-                "[in]          flecs.components.transform.Transform3,"
-                "[in] ANY:     flecs.components.geometry.Rectangle,"
-                "[in] ANY:     flecs.components.graphics.Color,"
-                "[in] ?SHARED: flecs.systems.sokol.Material")
+    ECS_ENTITY(world, SokolRectangleGeometry, Geometry);
+        ecs_set(world, SokolRectangleGeometry, SokolGeometryQuery, {
+            .component = ecs_entity(EcsRectangle),
+            .populate = populate_rectangle
         });
-
-    /* Create system that manages buffers for rectangles */
-    ECS_SYSTEM(world, SokolAttachRect, EcsPostLoad, 
-        RectangleBuffer:flecs.system.Query, 
-        RectangleBuffer:Buffer);
 
     /* Support for box primitive */
-
-    ECS_ENTITY(world, SokolBoxBuffer,
-        Buffer, flecs.system.Query);
-
-        /* Create query for boxes */
-        ecs_set(world, SokolBoxBuffer, EcsQuery, {
-            ecs_query_new(world, 
-                "[in]          flecs.components.transform.Transform3,"
-                "[in] ANY:     flecs.components.geometry.Box,"
-                "[in] ANY:     flecs.components.graphics.Color,"
-                "[in] ?SHARED: flecs.systems.sokol.Material")
+    ECS_ENTITY(world, SokolBoxGeometry, Geometry);
+        ecs_set(world, SokolBoxGeometry, SokolGeometryQuery, {
+            .component = ecs_entity(EcsBox),
+            .populate = populate_box
         });
 
     /* Create system that manages buffers for rectangles */
-    ECS_SYSTEM(world, SokolAttachBox, EcsPostLoad, 
-        BoxBuffer:flecs.system.Query, 
-        BoxBuffer:Buffer);       
+    ECS_SYSTEM(world, SokolPopulateGeometry, EcsPostLoad, 
+        Geometry, [in] GeometryQuery);       
 }

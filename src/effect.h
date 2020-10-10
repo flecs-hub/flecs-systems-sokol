@@ -1,7 +1,7 @@
 
 
 sg_image sokol_effect_run(
-    SokolCanvas *sk_canvas,
+    SokolRenderer *sk_canvas,
     SokolEffect *effect,
     sg_image input);
 

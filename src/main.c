@@ -272,8 +272,6 @@ sg_pipeline init_pipeline(void) {
             "    vec4 diffuse = vec4(u_light_color, 0) * dot_n_l;\n"
             "    vec4 light = emissive + clamp(1.0 - emissive, 0, 1.0) * (ambient + s * diffuse);\n"
             "    frag_color = light * color + s * specular;\n"
-            // "    frag_color = vec4(depth, 0, 0, 0);\n"
-            // "    frag_color = vec4(texture(shadow_map, vec2(position.x / 20 + 0.5, position.z / 20 + 0.25)).xyz, 0);\n"
             "  } else {\n"
             "    vec4 light = emissive + clamp(1.0 - emissive, 0, 1.0) * (ambient);\n"
             "    frag_color = light * color;\n"
@@ -467,12 +465,12 @@ void init_materials(
 }
 
 static
-void SokolSetCanvas(ecs_iter_t *it) {
+void SokolSetRenderer(ecs_iter_t *it) {
     ecs_world_t *world = it->world;
     Sdl2Window *window = ecs_column(it, Sdl2Window, 1);
     EcsCanvas *canvas = ecs_column(it, EcsCanvas, 2);
-    ecs_entity_t ecs_entity(SokolCanvas) = ecs_column_entity(it, 3);
-    ecs_entity_t ecs_entity(SokolBuffer) = ecs_column_entity(it, 4);
+    ecs_entity_t ecs_entity(SokolRenderer) = ecs_column_entity(it, 3);
+    ecs_entity_t ecs_entity(SokolGeometry) = ecs_column_entity(it, 4);
     ecs_entity_t ecs_entity(SokolMaterial) = ecs_column_entity(it, 5);
 
     for (int32_t i = 0; i < it->count; i ++) {
@@ -488,7 +486,7 @@ void SokolSetCanvas(ecs_iter_t *it) {
         sg_image offscreen_tex = sokol_init_render_target_16(w, h);
         sg_image offscreen_depth_tex = sokol_init_render_depth_target(w, h);
 
-        ecs_set(world, it->entities[i], SokolCanvas, {
+        ecs_set(world, it->entities[i], SokolRenderer, {
             .sdl_window = sdl_window,
             .gl_context = ctx,
             .pass_action = init_pass_action(&canvas[i]),
@@ -505,8 +503,8 @@ void SokolSetCanvas(ecs_iter_t *it) {
 
         ecs_trace_1("sokol canvas initialized");
 
-        ecs_set_trait(world, it->entities[i], SokolBuffer, EcsQuery, {
-            ecs_query_new(world, "[in] flecs.systems.sokol.Buffer")
+        ecs_set_trait(world, it->entities[i], SokolGeometry, EcsQuery, {
+            ecs_query_new(world, "[in] flecs.systems.sokol.Geometry")
         });
 
         ecs_set_trait(world, it->entities[i], SokolMaterial, EcsQuery, {
@@ -524,8 +522,8 @@ void SokolSetCanvas(ecs_iter_t *it) {
 }
 
 static
-void SokolUnsetCanvas(ecs_iter_t *it) {
-    SokolCanvas *canvas = ecs_column(it, SokolCanvas, 1);
+void SokolUnsetRenderer(ecs_iter_t *it) {
+    SokolRenderer *canvas = ecs_column(it, SokolRenderer, 1);
 
     int32_t i;
     for (i = 0; i < it->count; i ++) {
@@ -551,9 +549,35 @@ void SokolRegisterMaterial(ecs_iter_t *it) {
 }
 
 static
+void draw_instances(
+    SokolRenderer *canvas,
+    SokolGeometry *geometry,
+    sokol_instances_t *instances)
+{
+    if (!instances->instance_count) {
+        return;
+    }
+
+    sg_bindings bind = {
+        .vertex_buffers = {
+            [0] = geometry->vertex_buffer,
+            [1] = geometry->normal_buffer,
+            [2] = instances->color_buffer,
+            [3] = instances->material_buffer,
+            [4] = instances->transform_buffer
+        },
+        .index_buffer = geometry->index_buffer,
+        .fs_images[0] = canvas->shadow_pass.color_tex
+    };
+
+    sg_apply_bindings(&bind);
+    sg_draw(0, geometry->index_count, instances->instance_count);
+}
+
+static
 void SokolRender(ecs_iter_t *it) {
     ecs_world_t *world = it->world;
-    SokolCanvas *sk_canvas = ecs_column(it, SokolCanvas, 1);
+    SokolRenderer *sk_canvas = ecs_column(it, SokolRenderer, 1);
     EcsCanvas *canvas = ecs_column(it, EcsCanvas, 2);
     EcsQuery *q_buffers = ecs_column(it, EcsQuery, 3);
     EcsQuery *q_mats = ecs_column(it, EcsQuery, 4);
@@ -597,6 +621,8 @@ void SokolRender(ecs_iter_t *it) {
         sg_begin_pass(sk_canvas->offscreen_pass, &sk_canvas->pass_action);
         sg_apply_pipeline(sk_canvas->pip);
 
+        sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &vs_u, sizeof(vs_uniforms_t));
+        sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &fs_u, sizeof(fs_uniforms_t));
         if (materials_changed) {
             sg_apply_uniforms(SG_SHADERSTAGE_VS, 1, &mat_u, sizeof(vs_materials_t));
         }
@@ -604,29 +630,12 @@ void SokolRender(ecs_iter_t *it) {
         /* Loop buffers, render scene */
         ecs_iter_t qit = ecs_query_iter(buffers);
         while (ecs_query_next(&qit)) {
-            SokolBuffer *buffer = ecs_column(&qit, SokolBuffer, 1);
-            
+            SokolGeometry *geometry = ecs_column(&qit, SokolGeometry, 1);
+
             int b;
             for (b = 0; b < qit.count; b ++) {
-                if (!buffer[b].instance_count) {
-                    continue;
-                }
-                sg_bindings bind = {
-                    .vertex_buffers = {
-                        [0] = buffer[b].vertex_buffer,
-                        [1] = buffer[b].normal_buffer,
-                        [2] = buffer[b].color_buffer,
-                        [3] = buffer[b].material_buffer,
-                        [4] = buffer[b].transform_buffer
-                    },
-                    .index_buffer = buffer[b].index_buffer,
-                    .fs_images[0] = sk_canvas[i].shadow_pass.color_tex
-                };
-
-                sg_apply_bindings(&bind);
-                sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &vs_u, sizeof(vs_uniforms_t));
-                sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &fs_u, sizeof(fs_uniforms_t));
-                sg_draw(0, buffer[b].index_count, buffer[b].instance_count);
+                draw_instances(sk_canvas, &geometry[b], &geometry[b].solid);
+                draw_instances(sk_canvas, &geometry[b], &geometry[b].emissive);
             }
         }
         sg_end_pass();
@@ -649,6 +658,7 @@ void SokolRender(ecs_iter_t *it) {
         sg_apply_bindings(&bind);
         sg_draw(0, 6, 1);
         sg_end_pass();
+        
         sg_commit();
         SDL_GL_SwapWindow(sk_canvas->sdl_window);
     }
@@ -664,20 +674,20 @@ void FlecsSystemsSokolImport(
     ECS_IMPORT(world, FlecsSystemsSdl2);
     ECS_IMPORT(world, FlecsComponentsGui);
 
-    ECS_COMPONENT(world, SokolCanvas);
+    ECS_COMPONENT(world, SokolRenderer);
     ECS_COMPONENT(world, SokolMaterial);
 
-    ECS_IMPORT(world, FlecsSystemsSokolBuffer);
+    ECS_IMPORT(world, FlecsSystemsSokolGeometry);
 
-    ECS_SYSTEM(world, SokolSetCanvas, EcsOnSet,
+    ECS_SYSTEM(world, SokolSetRenderer, EcsOnSet,
         flecs.systems.sdl2.window.Window,
         flecs.components.gui.Canvas,
-        :Canvas,
-        :Buffer,
+        :Renderer,
+        :Geometry,
         :Material);
 
-    ECS_SYSTEM(world, SokolUnsetCanvas, EcsUnSet, 
-        Canvas);
+    ECS_SYSTEM(world, SokolUnsetRenderer, EcsUnSet, 
+        Renderer);
 
     ECS_SYSTEM(world, SokolRegisterMaterial, EcsPostLoad,
         [out] !flecs.systems.sokol.Material,
@@ -686,9 +696,9 @@ void FlecsSystemsSokolImport(
                ?Prefab);
 
     ECS_SYSTEM(world, SokolRender, EcsOnStore, 
-        Canvas, 
+        Renderer, 
         flecs.components.gui.Canvas, 
-        flecs.system.Query FOR Buffer,
+        flecs.system.Query FOR Geometry,
         flecs.system.Query FOR Material,
         :flecs.components.graphics.Camera,
         :flecs.components.graphics.DirectionalLight);      
