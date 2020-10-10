@@ -28,19 +28,7 @@ typedef struct vs_materials_t {
 } vs_materials_t;
 
 static
-sg_pass init_offscreen_pass(
-    sg_image img, 
-    sg_image depth_img) 
-{
-    return sg_make_pass(&(sg_pass_desc){
-        .color_attachments[0].image = img,
-        .depth_stencil_attachment.image = depth_img,
-        .label = "offscreen-pass"
-    });    
-}
-
-static
-sg_pipeline init_pipeline(void) {
+sg_pipeline init_scene_pipeline(void) {
     /* create an instancing shader */
     sg_shader shd = sg_make_shader(&(sg_shader_desc){
         .vs.uniform_blocks = {
@@ -214,18 +202,9 @@ sg_pipeline init_pipeline(void) {
 }
 
 static
-sg_pipeline init_tex_pipeline() {
-    /* create an instancing shader */
+sg_pipeline init_screen_pipeline() {
     sg_shader shd = sg_make_shader(&(sg_shader_desc){
-        .vs.source =
-            "#version 330\n"
-            "layout(location=0) in vec4 v_position;\n"
-            "layout(location=1) in vec2 v_uv;\n"
-            "out vec2 uv;\n"
-            "void main() {\n"
-            "  gl_Position = v_position;\n"
-            "  uv = v_uv;\n"
-            "}\n",
+        .vs.source = sokol_vs_passthrough(),
         .fs = {
             .source =
                 "#version 330\n"
@@ -237,7 +216,7 @@ sg_pipeline init_tex_pipeline() {
                 "}\n"
                 ,
             .images[0] = {
-                .name = "tex",
+                .name = "screen",
                 .type = SG_IMAGETYPE_2D
             }
         }
@@ -373,6 +352,35 @@ sokol_resources_t init_resources(void) {
 }
 
 static
+sokol_offscreen_pass_t init_scene_pass(
+    ecs_rgb_t background_color,
+    int32_t w, 
+    int32_t h) 
+{
+    sg_image color_target = sokol_target_rgba16f(w, h);
+    sg_image depth_target = sokol_target_depth(w, h);
+
+    return (sokol_offscreen_pass_t){
+        .pass_action = sokol_clear_action(background_color),
+        .pass = sg_make_pass(&(sg_pass_desc){
+            .color_attachments[0].image = color_target,
+            .depth_stencil_attachment.image = depth_target
+        }),
+        .pip = init_scene_pipeline(),
+        .color_target = color_target,
+        .depth_target = depth_target,
+    };   
+}
+
+static
+sokol_screen_pass_t init_screen_pass(void) {
+    return (sokol_screen_pass_t){
+        .pass_action = sokol_clear_action((ecs_rgb_t){0, 0, 0}),
+        .pip = init_screen_pipeline()
+    };
+}
+
+static
 void SokolSetRenderer(ecs_iter_t *it) {
     ecs_world_t *world = it->world;
     Sdl2Window *window = ecs_column(it, Sdl2Window, 1);
@@ -392,21 +400,14 @@ void SokolSetRenderer(ecs_iter_t *it) {
         ecs_trace_1("sokol initialized");
 
         sokol_resources_t resources = init_resources();
-        sg_image offscreen_tex = sokol_target_rgba16f(w, h);
-        sg_image offscreen_depth_tex = sokol_target_depth(w, h);
-
+        
         ecs_set(world, it->entities[i], SokolRenderer, {
             .resources = resources,
             .sdl_window = sdl_window,
             .gl_context = ctx,
-            .pass_action = sokol_clear_action(canvas[i].background_color),
-            .tex_pass_action = sokol_clear_action((ecs_rgb_t){0, 0, 0}),
-            .pip = init_pipeline(),
-            .tex_pip = init_tex_pipeline(),
-            .offscreen_tex = offscreen_tex,
-            .offscreen_depth_tex = offscreen_depth_tex,
-            .offscreen_pass = init_offscreen_pass(offscreen_tex, offscreen_depth_tex),
             .shadow_pass = sokol_init_shadow_pass(SHADOW_MAP_SIZE),
+            .scene_pass = init_scene_pass(canvas[i].background_color, w, h),
+            .screen_pass = init_screen_pass(),
             .fx_bloom = sokol_init_bloom(w, h)
         });
 
@@ -527,8 +528,8 @@ void SokolRender(ecs_iter_t *it) {
             ecs_entity(EcsCamera), ecs_entity(EcsDirectionalLight));
 
         /* Render to offscreen texture so screen-space effects can be applied */
-        sg_begin_pass(r->offscreen_pass, &r->pass_action);
-        sg_apply_pipeline(r->pip);
+        sg_begin_pass(r->scene_pass.pass, &r->scene_pass.pass_action);
+        sg_apply_pipeline(r->scene_pass.pip);
 
         sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &vs_u, sizeof(vs_uniforms_t));
         sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &fs_u, sizeof(fs_uniforms_t));
@@ -543,25 +544,25 @@ void SokolRender(ecs_iter_t *it) {
 
             int b;
             for (b = 0; b < qit.count; b ++) {
-                draw_instances(&geometry[b], &geometry[b].solid, r->shadow_pass.color_tex);
-                draw_instances(&geometry[b], &geometry[b].emissive, r->shadow_pass.color_tex);
+                draw_instances(&geometry[b], &geometry[b].solid, r->shadow_pass.color_target);
+                draw_instances(&geometry[b], &geometry[b].emissive, r->shadow_pass.color_target);
             }
         }
         sg_end_pass();
 
         /* Apply bloom effect */
-        sg_image tex_fx = sokol_effect_run(
-            &r->resources, &r->fx_bloom, r->offscreen_tex);
+        sg_image target = sokol_effect_run(
+            &r->resources, &r->fx_bloom, r->scene_pass.color_target);
 
         /* Render resulting offscreen texture to screen */
-        sg_begin_default_pass(&r->tex_pass_action, w, h);
-        sg_apply_pipeline(r->tex_pip);
+        sg_begin_default_pass(&r->screen_pass.pass_action, w, h);
+        sg_apply_pipeline(r->screen_pass.pip);
 
         sg_bindings bind = {
             .vertex_buffers = { 
                 [0] = r->resources.quad 
             },
-            .fs_images[0] = tex_fx
+            .fs_images[0] = target
         };
 
         sg_apply_bindings(&bind);

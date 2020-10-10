@@ -29,13 +29,18 @@ typedef struct sokol_resources_t {
 #include "geometry.h"
 #include "effect.h"
 
-typedef struct sokol_shadow_pass_t {
+typedef struct sokol_offscreen_pass_t {
     sg_pass_action pass_action;
     sg_pass pass;
     sg_pipeline pip;
-    sg_image depth_tex;
-    sg_image color_tex;
-} sokol_shadow_pass_t;
+    sg_image depth_target;
+    sg_image color_target;
+} sokol_offscreen_pass_t;
+
+typedef struct sokol_screen_pass_t {
+    sg_pass_action pass_action;
+    sg_pipeline pip;
+} sokol_screen_pass_t;
 
 typedef struct SokolMaterial {
     uint16_t material_id;
@@ -46,31 +51,23 @@ typedef struct SokolRenderer {
 
     SDL_Window* sdl_window;
     SDL_GLContext gl_context;
-	sg_pass_action pass_action;
-    sg_pipeline pip;
 
-    sg_image offscreen_tex;
-    sg_image offscreen_depth_tex;
-    sg_pass offscreen_pass;
-    sg_pass shadow_map_pass;
-    sg_pass_action tex_pass_action;
-
-    sokol_shadow_pass_t shadow_pass;    
+    sokol_offscreen_pass_t shadow_pass;
+    sokol_offscreen_pass_t scene_pass;
+    sokol_screen_pass_t screen_pass;
 
     SokolEffect fx_bloom;
-
-    sg_pipeline tex_pip;
 } SokolRenderer;
 
 SokolEffect sokol_init_bloom(
     int width, 
     int height);
 
-sokol_shadow_pass_t sokol_init_shadow_pass(
+sokol_offscreen_pass_t sokol_init_shadow_pass(
     int size);    
 
 void sokol_run_shadow_pass(
     ecs_query_t *buffers,
-    sokol_shadow_pass_t *pass,
+    sokol_offscreen_pass_t *pass,
     const EcsDirectionalLight *light_data,
     mat4 light_vp);

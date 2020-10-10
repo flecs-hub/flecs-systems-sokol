@@ -32,10 +32,10 @@ static const char *shd_f =
     "  frag_color = encodeDepth(depth);\n"
     "}\n";
 
-sokol_shadow_pass_t sokol_init_shadow_pass(
+sokol_offscreen_pass_t sokol_init_shadow_pass(
     int size)
 {
-    sokol_shadow_pass_t result = {};
+    sokol_offscreen_pass_t result = {};
 
     result.pass_action  = (sg_pass_action) {
         .colors[0] = { 
@@ -44,12 +44,12 @@ sokol_shadow_pass_t sokol_init_shadow_pass(
         }
     };
 
-    result.depth_tex = sokol_target_depth(size, size);
-    result.color_tex = sokol_target_rgba8(size, size);
+    result.depth_target = sokol_target_depth(size, size);
+    result.color_target = sokol_target_rgba8(size, size);
 
     result.pass = sg_make_pass(&(sg_pass_desc){
-        .color_attachments[0].image = result.color_tex,
-        .depth_stencil_attachment.image = result.depth_tex,
+        .color_attachments[0].image = result.color_target,
+        .depth_stencil_attachment.image = result.depth_target,
         .label = "shadow-map-pass"
     });
 
@@ -154,7 +154,7 @@ void draw_instances(
 
 void sokol_run_shadow_pass(
     ecs_query_t *buffers,
-    sokol_shadow_pass_t *pass,
+    sokol_offscreen_pass_t *pass,
     const EcsDirectionalLight *light_data,
     mat4 light_vp) 
 {
