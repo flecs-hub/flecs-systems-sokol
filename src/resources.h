@@ -33,7 +33,9 @@ int32_t sokol_rectangle_index_count(void);
 sg_buffer sokol_buffer_rectangle_normals(void);
 
 sg_pass_action sokol_clear_action(
-    ecs_rgb_t color);
+    ecs_rgb_t color,
+    bool clear_color,
+    bool clear_depth);
 
 const char* sokol_vs_passthrough(void);
 

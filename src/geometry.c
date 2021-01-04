@@ -311,13 +311,13 @@ void FlecsSystemsSokolGeometryImport(
     /* Support for rectangle primitive */
     ECS_ENTITY(world, SokolRectangleGeometry, Geometry);
         ecs_set(world, SokolRectangleGeometry, SokolGeometryQuery, {
-            .component = ecs_entity(EcsRectangle)
+            .component = ecs_typeid(EcsRectangle)
         });
 
     /* Support for box primitive */
     ECS_ENTITY(world, SokolBoxGeometry, Geometry);
         ecs_set(world, SokolBoxGeometry, SokolGeometryQuery, {
-            .component = ecs_entity(EcsBox)
+            .component = ecs_typeid(EcsBox)
         });
 
     /* Create system that manages buffers for rectangles */

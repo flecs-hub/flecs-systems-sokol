@@ -2,7 +2,7 @@
 
 static
 const char *shd_threshold =
-    "float thresh = 1.0;\n"
+    "float thresh = 0.8;\n"
     "vec4 c = texture(tex, uv);\n"
     "c.r = max(c.r - thresh, 0);\n"
     "c.g = max(c.g - thresh, 0);\n"

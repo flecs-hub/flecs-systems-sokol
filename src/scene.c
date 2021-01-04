@@ -49,7 +49,7 @@ sg_pipeline init_scene_pipeline(void) {
                         [4] = { .name="u_shadow_map_size", .type=SG_UNIFORMTYPE_FLOAT }
                     }
                 }
-            }        
+            }
         },
         .vs.source =
             "#version 330\n"
@@ -145,7 +145,6 @@ sg_pipeline init_scene_pipeline(void) {
             "}\n"
     });
 
-    /* create a pipeline object (default render state is fine) */
     return sg_make_pipeline(&(sg_pipeline_desc){
         .shader = shd,
         .index_type = SG_INDEXTYPE_UINT16,
@@ -180,7 +179,7 @@ sg_pipeline init_scene_pipeline(void) {
         },
         .depth_stencil = {
             .depth_compare_func = SG_COMPAREFUNC_LESS_EQUAL,
-            .depth_write_enabled = true
+            .depth_write_enabled = false
         },
         .rasterizer.cull_mode = SG_CULLMODE_BACK
     });
@@ -188,21 +187,21 @@ sg_pipeline init_scene_pipeline(void) {
 
 sokol_offscreen_pass_t sokol_init_scene_pass(
     ecs_rgb_t background_color,
+    sg_image depth_target,
     int32_t w, 
     int32_t h) 
 {
     sg_image color_target = sokol_target_rgba16f(w, h);
-    sg_image depth_target = sokol_target_depth(w, h);
 
     return (sokol_offscreen_pass_t){
-        .pass_action = sokol_clear_action(background_color),
+        .pass_action = sokol_clear_action(background_color, true, false),
         .pass = sg_make_pass(&(sg_pass_desc){
             .color_attachments[0].image = color_target,
             .depth_stencil_attachment.image = depth_target
         }),
         .pip = init_scene_pipeline(),
         .color_target = color_target,
-        .depth_target = depth_target,
+        .depth_target = depth_target
     };   
 }
 
@@ -212,8 +211,8 @@ void init_uniforms(
     vs_uniforms_t *vs_out,
     fs_uniforms_t *fs_out)
 {
-    vec3 eye = {0, -4.0, 0.0};
-    vec3 center = {0, 0.0, 5.0};
+    vec3 eye = {0, 0, -2.0};
+    vec3 center = {0.0, 0.0, 0.0};
     vec3 up = {0.0, 1.0, 0.0};
 
     mat4 mat_p;
@@ -222,7 +221,7 @@ void init_uniforms(
     /* Compute perspective & lookat matrix */
     if (state->camera) {
         EcsCamera cam = *state->camera;
-        glm_perspective(cam.fov, state->aspect, 0.5, 100.0, mat_p);
+        glm_perspective(cam.fov, state->aspect, cam.near, cam.far, mat_p);
         glm_lookat(cam.position, cam.lookat, cam.up, mat_v);
         glm_vec3_copy(cam.position, fs_out->eye_pos);
     } else {

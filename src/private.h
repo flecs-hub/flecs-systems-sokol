@@ -11,6 +11,7 @@
 
 #define SOKOL_MAX_EFFECT_INPUTS (8)
 #define SOKOL_MAX_EFFECT_PASS (8)
+#define SOKOL_MAX_EFFECT_PARAMS (32)
 
 #define SOKOL_MAX_MATERIALS (255)
 #define SOKOL_SHADOW_MAP_SIZE (4096)
@@ -49,6 +50,9 @@ typedef struct sokol_render_state_t {
     int32_t width;
     int32_t height;
     float aspect;
+    float delta_time;
+    float world_time;
+    mat4 light_mat_v;
     mat4 light_mat_vp;
     sg_image shadow_map;
 } sokol_render_state_t;
@@ -62,6 +66,7 @@ typedef struct sokol_offscreen_pass_t {
 } sokol_offscreen_pass_t;
 
 #include "resources.h"
+#include "camera.h"
 #include "geometry.h"
 #include "effect.h"
 
@@ -80,8 +85,10 @@ typedef struct SokolRenderer {
     SDL_Window* sdl_window;
     SDL_GLContext gl_context;
 
-    sokol_offscreen_pass_t shadow_pass;    
+    sokol_offscreen_pass_t shadow_pass;
+    sokol_offscreen_pass_t depth_pass;    
     sokol_offscreen_pass_t scene_pass;
+    sokol_offscreen_pass_t gizmo_pass;
     sokol_screen_pass_t screen_pass;
 
     SokolEffect fx_bloom;
@@ -99,9 +106,20 @@ void sokol_run_shadow_pass(
     sokol_offscreen_pass_t *pass,
     sokol_render_state_t *state);
 
+/* Depth pass */
+sokol_offscreen_pass_t sokol_init_depth_pass(
+    int32_t w, 
+    int32_t h);
+
+void sokol_run_depth_pass(
+    sokol_offscreen_pass_t *pass,
+    sokol_render_state_t *state,
+    sokol_vs_materials_t *mat_u);
+
 /* Scene pass */
 sokol_offscreen_pass_t sokol_init_scene_pass(
     ecs_rgb_t background_color,
+    sg_image depth_target,
     int32_t w, 
     int32_t h);
 
@@ -114,6 +132,15 @@ void sokol_run_scene_pass(
 sokol_screen_pass_t sokol_init_screen_pass(void);
 
 void sokol_run_screen_pass(
+    sokol_screen_pass_t *pass,
+    sokol_resources_t *resources,
+    sokol_render_state_t *state,
+    sg_image target);
+
+/* Gizmo pass */
+sokol_screen_pass_t sokol_init_gizmo_pass(void);
+
+void sokol_run_gizmo_pass(
     sokol_screen_pass_t *pass,
     sokol_resources_t *resources,
     sokol_render_state_t *state,

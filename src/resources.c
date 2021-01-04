@@ -230,14 +230,29 @@ sg_buffer sokol_buffer_rectangle_normals(void)
 }
 
 sg_pass_action sokol_clear_action(
-    ecs_rgb_t color)
+    ecs_rgb_t color,
+    bool clear_color,
+    bool clear_depth)
 {
-    return (sg_pass_action) {
-        .colors[0] = {
-            .action = SG_ACTION_CLEAR, 
-            .val = { color.r, color.g, color.b, 1.0f }
-        } 
-    };
+    sg_pass_action action = {0};
+    if (clear_color) {
+        action.colors[0].action = SG_ACTION_CLEAR;
+        action.colors[0].val[0] = color.r;
+        action.colors[0].val[1] = color.g;
+        action.colors[0].val[2] = color.b;
+        action.colors[0].val[3] = 1.0f;
+    } else {
+        action.colors[0].action = SG_ACTION_DONTCARE;
+    }
+
+    if (clear_depth) {
+        action.depth.action = SG_ACTION_CLEAR;
+        action.depth.val = 1.0;
+    } else {
+        action.depth.action = SG_ACTION_DONTCARE;
+    }
+
+    return action;
 }
 
 const char* sokol_vs_passthrough(void)
