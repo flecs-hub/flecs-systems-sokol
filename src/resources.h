@@ -39,4 +39,8 @@ sg_pass_action sokol_clear_action(
 
 const char* sokol_vs_passthrough(void);
 
+const char* sokol_vs_depth(void);
+
+const char* sokol_fs_depth(void);
+
 #endif

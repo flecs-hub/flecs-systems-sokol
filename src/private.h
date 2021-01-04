@@ -92,9 +92,14 @@ typedef struct SokolRenderer {
     sokol_screen_pass_t screen_pass;
 
     SokolEffect fx_bloom;
+    SokolEffect fx_fog;
 } SokolRenderer;
 
 SokolEffect sokol_init_bloom(
+    int width, 
+    int height);
+
+SokolEffect sokol_init_fog(
     int width, 
     int height);
 
@@ -113,8 +118,7 @@ sokol_offscreen_pass_t sokol_init_depth_pass(
 
 void sokol_run_depth_pass(
     sokol_offscreen_pass_t *pass,
-    sokol_render_state_t *state,
-    sokol_vs_materials_t *mat_u);
+    sokol_render_state_t *state);
 
 /* Scene pass */
 sokol_offscreen_pass_t sokol_init_scene_pass(

@@ -13,6 +13,7 @@ typedef struct sokol_fx_pass_param_t {
 
 typedef struct sokol_fx_pass_desc_t {
     const char *shader;
+    const char *shader_header;
     int32_t width;
     int32_t height;
     sokol_fx_pass_input_t inputs[SOKOL_MAX_EFFECT_INPUTS];
@@ -31,8 +32,12 @@ typedef struct sokol_fx_pass_t {
 
 typedef struct SokolEffect {
     sokol_fx_pass_t pass[SOKOL_MAX_EFFECT_PASS];
+    int32_t input_count;
     int32_t pass_count;
 } SokolEffect;
+
+SokolEffect sokol_effect_init(
+    int32_t input_count);
 
 void sokol_effect_set_param(
     SokolEffect *effect,
@@ -42,7 +47,8 @@ void sokol_effect_set_param(
 sg_image sokol_effect_run(
     sokol_resources_t *res,
     SokolEffect *effect,
-    sg_image input);
+    int32_t input_count,
+    sg_image inputs[]);
 
 int sokol_effect_add_pass(
     SokolEffect *fx, 

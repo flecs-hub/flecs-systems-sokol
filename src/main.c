@@ -46,7 +46,8 @@ void SokolSetRenderer(ecs_iter_t *it) {
             .shadow_pass = sokol_init_shadow_pass(SOKOL_SHADOW_MAP_SIZE),
             .scene_pass = sokol_init_scene_pass(canvas[i].background_color, depth_pass.depth_target, w, h),
             .screen_pass = sokol_init_screen_pass(),
-            .fx_bloom = sokol_init_bloom(w * 2, h * 2)
+            .fx_bloom = sokol_init_bloom(w * 2, h * 2),
+            .fx_fog = sokol_init_fog(w, h)
         });
 
         ecs_trace_1("sokol canvas initialized");
@@ -287,15 +288,17 @@ void SokolRender(ecs_iter_t *it) {
         if (light) {
             state.light = ecs_get(world, light, EcsDirectionalLight);
             init_light_mat_vp(&state);
-            // sokol_run_shadow_pass(&r[i].shadow_pass, &state);   
+            sokol_run_shadow_pass(&r[i].shadow_pass, &state);   
         }
 
-        sokol_run_depth_pass(&r[i].depth_pass, &state, mat_set ? &mat_u : NULL);
-
+        sokol_run_depth_pass(&r[i].depth_pass, &state);
         sokol_run_scene_pass(&r[i].scene_pass, &state, mat_set ? &mat_u : NULL);
 
         sg_image target = sokol_effect_run(
-            &r->resources, &r->fx_bloom, r->scene_pass.color_target);
+            &r->resources, &r->fx_bloom, 1, (sg_image[]){r->scene_pass.color_target});
+
+        target = sokol_effect_run(
+            &r->resources, &r->fx_fog, 2, (sg_image[]){target, r->depth_pass.color_target});
 
         sokol_run_screen_pass(&r->screen_pass, &r->resources, &state, target);
         

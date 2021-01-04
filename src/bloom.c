@@ -53,7 +53,7 @@ const char *shd_blend =
 SokolEffect sokol_init_bloom(
     int width, int height)
 {
-    SokolEffect fx = {};
+    SokolEffect fx = sokol_effect_init(1);
     int blur_w = width * 0.2;
     int blur_h = height * 0.2;
 

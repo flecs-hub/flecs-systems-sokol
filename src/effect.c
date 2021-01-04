@@ -22,6 +22,10 @@ char* build_fs_shader(
         ecs_strbuf_append(&fs_shader, "uniform sampler2D %s;\n", input->name);
         i ++;
     }
+
+    if (pass.shader_header) {
+        ecs_strbuf_appendstr(&fs_shader, pass.shader_header);
+    }
     
     ecs_strbuf_appendstr(&fs_shader, "void main() {\n");
     ecs_strbuf_append(&fs_shader, pass.shader);
@@ -86,15 +90,14 @@ int sokol_effect_add_pass(
         .label = "fx-pass"
     }); 
 
-    return fx->pass_count;
+    return fx->pass_count - 1;
 }
 
 static
 void effect_pass_draw(
     sokol_resources_t *res,
     SokolEffect *effect,
-    sokol_fx_pass_t *fx_pass,
-    sg_image input_0)
+    sokol_fx_pass_t *fx_pass)
 {
     sg_begin_pass(fx_pass->pass.pass, &fx_pass->pass.pass_action);
     sg_apply_pipeline(fx_pass->pass.pip);
@@ -108,11 +111,7 @@ void effect_pass_draw(
     int i;
     for (i = 0; i < fx_pass->input_count; i ++) {
         int input = fx_pass->inputs[i];
-        if (!input) {
-            bind.fs_images[i] = input_0;
-        } else {
-            bind.fs_images[i] = effect->pass[input - 1].pass.color_target;
-        }
+        bind.fs_images[i] = effect->pass[input].pass.color_target;
     }
 
     sg_apply_bindings(&bind);
@@ -121,14 +120,32 @@ void effect_pass_draw(
     sg_end_pass();    
 }
 
+SokolEffect sokol_effect_init(
+    int32_t input_count)
+{
+    SokolEffect fx = {};
+    fx.input_count = input_count;
+    fx.pass_count = input_count;
+    return fx;
+}
+
 sg_image sokol_effect_run(
     sokol_resources_t *res,
     SokolEffect *effect,
-    sg_image input)
+    int32_t input_count,
+    sg_image inputs[])
 {
+    assert(input_count == effect->input_count);
+
+    /* Initialize inputs */
     int i;
-    for (i = 0; i < effect->pass_count; i ++) {
-        effect_pass_draw(res, effect, &effect->pass[i], input);
+    for (i = 0; i < input_count; i ++) {
+        effect->pass[i].pass.color_target = inputs[i];
+    }
+
+    /* Run passes */
+    for (; i < effect->pass_count; i ++) {
+        effect_pass_draw(res, effect, &effect->pass[i]);
     }
 
     return effect->pass[effect->pass_count - 1].pass.color_target;

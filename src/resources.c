@@ -266,3 +266,4 @@ const char* sokol_vs_passthrough(void)
             "  uv = v_uv;\n"
             "}\n";
 }
+
