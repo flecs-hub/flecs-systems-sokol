@@ -246,8 +246,6 @@ void CreateGeometryQueries(ecs_iter_t *it) {
     ecs_world_t *world = it->world;
     SokolGeometryQuery *sb = ecs_term(it, SokolGeometryQuery, 1);
 
-    printf("create component queries\n");
-
     int i;
     for (i = 0; i < it->count; i ++) {
         char *comp_path = ecs_get_fullpath(world, sb[i].component);
@@ -309,8 +307,8 @@ void FlecsSystemsSokolGeometryImport(
 
     ecs_set_name_prefix(world, "Sokol");
 
-    ECS_COMPONENT(world, SokolGeometry);
-    ECS_COMPONENT(world, SokolGeometryQuery);
+    ECS_COMPONENT_DEFINE(world, SokolGeometry);
+    ECS_COMPONENT_DEFINE(world, SokolGeometryQuery);
 
     ecs_set_component_actions(world, SokolGeometry, {
         .ctor = ecs_ctor(SokolGeometry),

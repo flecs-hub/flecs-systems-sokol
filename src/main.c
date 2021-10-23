@@ -21,11 +21,11 @@ void SokolSetRenderer(ecs_iter_t *it) {
     ecs_world_t *world = it->world;
     Sdl2Window *window = ecs_term(it, Sdl2Window, 1);
     EcsCanvas *canvas = ecs_term(it, EcsCanvas, 2);
-    ecs_entity_t ecs_id(SokolRenderer) = ecs_term_id(it, 3);
-    ecs_entity_t ecs_id(SokolGeometry) = ecs_term_id(it, 4);
-    ecs_entity_t ecs_id(SokolMaterial) = ecs_term_id(it, 5);
 
     for (int32_t i = 0; i < it->count; i ++) {
+        ecs_trace("#[bold]initializing sokol renderer");
+        ecs_log_push();
+
         int w, h;
         SDL_Window *sdl_window = window->window;
         SDL_GLContext ctx = SDL_GL_CreateContext(sdl_window);
@@ -33,7 +33,7 @@ void SokolSetRenderer(ecs_iter_t *it) {
 
         sg_setup(&(sg_desc) {0});
         assert(sg_isvalid());
-        ecs_trace("sokol initialized");
+        ecs_trace("library initialized");
 
         sokol_resources_t resources = init_resources();
         sokol_offscreen_pass_t depth_pass = sokol_init_depth_pass(w, h);
@@ -49,8 +49,7 @@ void SokolSetRenderer(ecs_iter_t *it) {
             .fx_bloom = sokol_init_bloom(w * 2, h * 2),
             .fx_fog = sokol_init_fog(w, h)
         });
-
-        ecs_trace("sokol canvas initialized");
+        ecs_trace("canvas initialized");
 
         ecs_set_pair(world, it->entities[i], EcsQuery, ecs_id(SokolGeometry), {
             ecs_query_new(world, "[in] flecs.systems.sokol.Geometry")
@@ -65,8 +64,9 @@ void SokolSetRenderer(ecs_iter_t *it) {
         });
 
         sokol_init_geometry(world, &resources);
+        ecs_trace("static geometry initialized");
 
-        ecs_trace("sokol buffer support initialized");
+        ecs_log_pop();
     }
 }
 
@@ -145,100 +145,19 @@ void init_light_mat_vp(
     sokol_render_state_t *state)
 {
     mat4 mat_p;
+    mat4 mat_v;
     vec3 lookat = {0.0, 0.0, 0.0};
     vec3 up = {0, 1, 0};
+
+    glm_ortho(-7, 7, -7, 7, -10, 30, mat_p);
 
     vec4 dir = {
         state->light->direction[0],
         state->light->direction[1],
         state->light->direction[2]
     };
-    // glm_vec4_scale(dir, 10, dir);
-    glm_lookat(dir, lookat, up, state->light_mat_v);
-
-    vec3 cam_pos = {0, 4, 4};
-    // cam_pos[0] = cos(state->world_time) * 5;
-    // cam_pos[1] = 4;
-    // cam_pos[2] = sin(state->world_time) * 5;
-
-
-        // Compute camera frustrum vertices in light space
-        ecs_rect_t near, far;
-        sokol_get_near_far_rect(
-            state->aspect, 
-            state->camera->near, 
-            SHADOW_FAR, 
-            state->camera->fov, 
-            &near, &far);
-
-        vec3 verts[8];
-        sokol_get_frustrum_verts(
-            state->camera->near,
-            SHADOW_FAR,
-            near,
-            far,
-            (float*)cam_pos,
-            (float*)state->camera->lookat,
-            up,
-            verts);
-
-        // printf("World = {%f, %f, %f}\n", verts[0][0], verts[0][1], verts[0][2]);
-
-        int i;
-        for (i = 0; i < 8; i ++) {
-            glm_mat4_mulv3(state->light_mat_v, verts[i], 1, verts[i]);
-        }
-
-        // printf("Light = {%f, %f, %f}\n", verts[0][0], verts[0][1], verts[0][2]);
-
-        vec3 first;
-        glm_vec3_copy(verts[0], first);
-        float min_x = first[0], max_x = first[0];
-        float min_y = first[1], max_y = first[1];
-        float min_z = first[2], max_z = first[2];
-
-        for (i = 1; i < 8; i ++) {
-            float x = verts[i][0];
-            min_x = glm_min(min_x, x);
-            max_x = glm_max(max_x, x);
-
-            float y = verts[i][1];
-            min_y = glm_min(min_y, y);
-            max_y = glm_max(max_y, y);
-
-            float z = verts[i][2];
-            min_z = glm_min(min_z, z);
-            max_z = glm_max(max_z, z);
-        }
-
-        float width = (max_x - min_x);
-        float height = (max_y - min_y);
-        float length = (max_z - min_z);
-
-        // printf("w = %f, h = %f, l = %f (%f)\n", width, height, length, width * height * length);
-
-        vec3 center = {
-            (max_x + min_x) / 2.0,
-            (max_y + min_y) / 2.0,
-            (max_z + min_z) / 2.0
-        };
-
-        mat4 inv_light_mat_v;
-        glm_mat4_inv(state->light_mat_v, inv_light_mat_v);
-        glm_mat4_mulv3(inv_light_mat_v, center, 1, center);
-
-        // printf("P {%f, %f, %f}\n", cam_pos[0], cam_pos[1], cam_pos[2]);
-        // printf("C {%f, %f, %f}\n", center[0], center[1], center[2]);
-
-
-
-    glm_translate(state->light_mat_v, center);
-
-    // width = 50;
-    // height = 50;
-    // length = 20;
-
-    glm_ortho(-width, width, -height, height, -length, length, mat_p);
+    glm_vec4_scale(dir, 50, dir);
+    glm_lookat(dir, lookat, up, mat_v);
 
     mat4 light_proj = {
          { 0.5f, 0.0f, 0.0f, 0 },
@@ -248,7 +167,7 @@ void init_light_mat_vp(
     };
     
     glm_mat4_mul(mat_p, light_proj, mat_p);
-    glm_mat4_mul(mat_p, state->light_mat_v, state->light_mat_vp);
+    glm_mat4_mul(mat_p, mat_v, state->light_mat_vp);
 }
 
 static
@@ -258,8 +177,6 @@ void SokolRender(ecs_iter_t *it) {
     EcsCanvas *canvas = ecs_term(it, EcsCanvas, 2);
     EcsQuery *q_buffers = ecs_term(it, EcsQuery, 3);
     EcsQuery *q_mats = ecs_term(it, EcsQuery, 4);
-    ecs_entity_t ecs_id(EcsCamera) = ecs_term_id(it, 5);
-    ecs_entity_t ecs_id(EcsDirectionalLight) = ecs_term_id(it, 6);
     sokol_render_state_t state = {};
     sokol_vs_materials_t mat_u = {};
 
@@ -290,6 +207,10 @@ void SokolRender(ecs_iter_t *it) {
             state.light = ecs_get(world, light, EcsDirectionalLight);
             init_light_mat_vp(&state);
             sokol_run_shadow_pass(&r[i].shadow_pass, &state);   
+        } else if (!state.ambient_light.r && !state.ambient_light.g && 
+                   !state.ambient_light.b) 
+        {
+            state.ambient_light = (EcsRgb){1.0, 1.0, 1.0};
         }
 
         sokol_run_depth_pass(&r[i].depth_pass, &state);
@@ -318,17 +239,14 @@ void FlecsSystemsSokolImport(
     ECS_IMPORT(world, FlecsSystemsSdl2);
     ECS_IMPORT(world, FlecsComponentsGui);
 
-    ECS_COMPONENT(world, SokolRenderer);
-    ECS_COMPONENT(world, SokolMaterial);
+    ECS_COMPONENT_DEFINE(world, SokolRenderer);
+    ECS_COMPONENT_DEFINE(world, SokolMaterial);
 
     ECS_IMPORT(world, FlecsSystemsSokolGeometry);
 
     ECS_OBSERVER(world, SokolSetRenderer, EcsOnSet,
         flecs.systems.sdl2.window.Window,
-        flecs.components.gui.Canvas,
-        Renderer(),
-        Geometry(),
-        Material());
+        flecs.components.gui.Canvas);
 
     ECS_OBSERVER(world, SokolUnsetRenderer, EcsUnSet, 
         Renderer);
@@ -343,7 +261,5 @@ void FlecsSystemsSokolImport(
         Renderer, 
         flecs.components.gui.Canvas, 
         (flecs.core.Query, Geometry),
-        (flecs.core.Query, Material),
-        flecs.components.graphics.Camera(),
-        flecs.components.graphics.DirectionalLight());
+        (flecs.core.Query, Material));
 }

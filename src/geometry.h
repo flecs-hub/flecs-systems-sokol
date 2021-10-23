@@ -56,6 +56,9 @@ typedef struct SokolGeometryQuery {
     ecs_query_t *transparent;
 } SokolGeometryQuery;
 
+ECS_COMPONENT_DECLARE(SokolGeometry);
+ECS_COMPONENT_DECLARE(SokolGeometryQuery);
+
 /* Initialize static resources for geometry rendering */
 void sokol_init_geometry(
     ecs_world_t *world,

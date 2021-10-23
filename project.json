@@ -7,6 +7,7 @@
         "use": [
             "flecs",
             "flecs.components.gui",
+            "flecs.components.graphics",
             "flecs.components.transform",
             "flecs.components.geometry",
             "flecs.systems.transform",

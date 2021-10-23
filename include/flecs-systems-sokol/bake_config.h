@@ -20,6 +20,7 @@
 /* Headers of public dependencies */
 #include <flecs.h>
 #include <flecs_components_gui.h>
+#include <flecs_components_graphics.h>
 #include <flecs_components_transform.h>
 #include <flecs_components_geometry.h>
 #include <flecs_systems_transform.h>

@@ -221,6 +221,19 @@ void init_uniforms(
     /* Compute perspective & lookat matrix */
     if (state->camera) {
         EcsCamera cam = *state->camera;
+        if (!cam.fov) {
+            cam.fov = 30;
+        }
+
+        if (!cam.near && !cam.far) {
+            cam.near = 0.1;
+            cam.far = 1000;
+        }
+
+        if (!cam.up[0] && !cam.up[1] && !cam.up[2]) {
+            cam.up[1] = 1.0;
+        }
+
         glm_perspective(cam.fov, state->aspect, cam.near, cam.far, mat_p);
         glm_lookat(cam.position, cam.lookat, cam.up, mat_v);
         glm_vec3_copy(cam.position, fs_out->eye_pos);
@@ -235,7 +248,6 @@ void init_uniforms(
 
     /* Get light parameters */
     if (state->light) {
-        /* Cast away const since glm doesn't do const */
         EcsDirectionalLight l = *state->light;
         glm_vec3_copy(l.direction, fs_out->light_direction);
         glm_vec3_copy(l.color, fs_out->light_color);

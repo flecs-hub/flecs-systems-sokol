@@ -66,7 +66,6 @@ typedef struct sokol_offscreen_pass_t {
 } sokol_offscreen_pass_t;
 
 #include "resources.h"
-#include "camera.h"
 #include "geometry.h"
 #include "effect.h"
 
@@ -74,6 +73,8 @@ typedef struct sokol_screen_pass_t {
     sg_pass_action pass_action;
     sg_pipeline pip;
 } sokol_screen_pass_t;
+
+/* Internal components */
 
 typedef struct SokolMaterial {
     uint16_t material_id;
@@ -94,6 +95,12 @@ typedef struct SokolRenderer {
     SokolEffect fx_bloom;
     SokolEffect fx_fog;
 } SokolRenderer;
+
+
+ECS_COMPONENT_DECLARE(SokolMaterial);
+ECS_COMPONENT_DECLARE(SokolRenderer);
+
+/* Internal functions */
 
 SokolEffect sokol_init_bloom(
     int width, 
