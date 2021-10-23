@@ -182,9 +182,9 @@ void sokol_run_depth_pass(
     sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &fs_u, sizeof(fs_uniforms_t));
 
     /* Loop geometry, render scene */
-    ecs_iter_t qit = ecs_query_iter(state->q_scene);
+    ecs_iter_t qit = ecs_query_iter(state->world, state->q_scene);
     while (ecs_query_next(&qit)) {
-        SokolGeometry *geometry = ecs_column(&qit, SokolGeometry, 1);
+        SokolGeometry *geometry = ecs_term(&qit, SokolGeometry, 1);
 
         int b;
         for (b = 0; b < qit.count; b ++) {

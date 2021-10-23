@@ -19,11 +19,11 @@ sokol_resources_t init_resources(void) {
 static
 void SokolSetRenderer(ecs_iter_t *it) {
     ecs_world_t *world = it->world;
-    Sdl2Window *window = ecs_column(it, Sdl2Window, 1);
-    EcsCanvas *canvas = ecs_column(it, EcsCanvas, 2);
-    ecs_entity_t ecs_typeid(SokolRenderer) = ecs_column_entity(it, 3);
-    ecs_entity_t ecs_typeid(SokolGeometry) = ecs_column_entity(it, 4);
-    ecs_entity_t ecs_typeid(SokolMaterial) = ecs_column_entity(it, 5);
+    Sdl2Window *window = ecs_term(it, Sdl2Window, 1);
+    EcsCanvas *canvas = ecs_term(it, EcsCanvas, 2);
+    ecs_entity_t ecs_id(SokolRenderer) = ecs_term_id(it, 3);
+    ecs_entity_t ecs_id(SokolGeometry) = ecs_term_id(it, 4);
+    ecs_entity_t ecs_id(SokolMaterial) = ecs_term_id(it, 5);
 
     for (int32_t i = 0; i < it->count; i ++) {
         int w, h;
@@ -33,7 +33,7 @@ void SokolSetRenderer(ecs_iter_t *it) {
 
         sg_setup(&(sg_desc) {0});
         assert(sg_isvalid());
-        ecs_trace_1("sokol initialized");
+        ecs_trace("sokol initialized");
 
         sokol_resources_t resources = init_resources();
         sokol_offscreen_pass_t depth_pass = sokol_init_depth_pass(w, h);
@@ -50,13 +50,13 @@ void SokolSetRenderer(ecs_iter_t *it) {
             .fx_fog = sokol_init_fog(w, h)
         });
 
-        ecs_trace_1("sokol canvas initialized");
+        ecs_trace("sokol canvas initialized");
 
-        ecs_set_trait(world, it->entities[i], SokolGeometry, EcsQuery, {
+        ecs_set_pair(world, it->entities[i], EcsQuery, ecs_id(SokolGeometry), {
             ecs_query_new(world, "[in] flecs.systems.sokol.Geometry")
         });
 
-        ecs_set_trait(world, it->entities[i], SokolMaterial, EcsQuery, {
+        ecs_set_pair(world, it->entities[i], EcsQuery, ecs_id(SokolMaterial), {
             ecs_query_new(world, 
                 "[in] flecs.systems.sokol.Material,"
                 "[in] ?flecs.components.graphics.Specular,"
@@ -66,13 +66,13 @@ void SokolSetRenderer(ecs_iter_t *it) {
 
         sokol_init_geometry(world, &resources);
 
-        ecs_trace_1("sokol buffer support initialized");
+        ecs_trace("sokol buffer support initialized");
     }
 }
 
 static
 void SokolUnsetRenderer(ecs_iter_t *it) {
-    SokolRenderer *canvas = ecs_column(it, SokolRenderer, 1);
+    SokolRenderer *canvas = ecs_term(it, SokolRenderer, 1);
 
     int32_t i;
     for (i = 0; i < it->count; i ++) {
@@ -83,7 +83,7 @@ void SokolUnsetRenderer(ecs_iter_t *it) {
 
 static
 void SokolRegisterMaterial(ecs_iter_t *it) {
-    ecs_entity_t ecs_typeid(SokolMaterial) = ecs_column_entity(it, 1);
+    ecs_entity_t ecs_id(SokolMaterial) = ecs_term_id(it, 1);
 
     static uint16_t next_material = 1; /* Material 0 is the default material */
 
@@ -102,11 +102,12 @@ void init_materials(
     ecs_query_t *mat_q, 
     sokol_vs_materials_t *mat_u)
 {
-    ecs_iter_t qit = ecs_query_iter(mat_q);
+    const ecs_world_t *world = ecs_get_world(mat_q);
+    ecs_iter_t qit = ecs_query_iter(world, mat_q);
     while (ecs_query_next(&qit)) {
-        SokolMaterial *mat = ecs_column(&qit, SokolMaterial, 1);
-        EcsSpecular *spec = ecs_column(&qit, EcsSpecular, 2);
-        EcsEmissive *em = ecs_column(&qit, EcsEmissive, 3);
+        SokolMaterial *mat = ecs_term(&qit, SokolMaterial, 1);
+        EcsSpecular *spec = ecs_term(&qit, EcsSpecular, 2);
+        EcsEmissive *em = ecs_term(&qit, EcsEmissive, 3);
 
         int i;
         if (spec) {
@@ -253,12 +254,12 @@ void init_light_mat_vp(
 static
 void SokolRender(ecs_iter_t *it) {
     ecs_world_t *world = it->world;
-    SokolRenderer *r = ecs_column(it, SokolRenderer, 1);
-    EcsCanvas *canvas = ecs_column(it, EcsCanvas, 2);
-    EcsQuery *q_buffers = ecs_column(it, EcsQuery, 3);
-    EcsQuery *q_mats = ecs_column(it, EcsQuery, 4);
-    ecs_entity_t ecs_typeid(EcsCamera) = ecs_column_entity(it, 5);
-    ecs_entity_t ecs_typeid(EcsDirectionalLight) = ecs_column_entity(it, 6);
+    SokolRenderer *r = ecs_term(it, SokolRenderer, 1);
+    EcsCanvas *canvas = ecs_term(it, EcsCanvas, 2);
+    EcsQuery *q_buffers = ecs_term(it, EcsQuery, 3);
+    EcsQuery *q_mats = ecs_term(it, EcsQuery, 4);
+    ecs_entity_t ecs_id(EcsCamera) = ecs_term_id(it, 5);
+    ecs_entity_t ecs_id(EcsDirectionalLight) = ecs_term_id(it, 6);
     sokol_render_state_t state = {};
     sokol_vs_materials_t mat_u = {};
 
@@ -269,12 +270,12 @@ void SokolRender(ecs_iter_t *it) {
     }
 
     state.delta_time = it->delta_time;
-    state.world_time = it->world_time;
 
     int32_t i;
     for (i = 0; i < it->count; i ++) {
         SDL_GL_GetDrawableSize(r[i].sdl_window, &state.width, &state.height);
         state.aspect = (float)state.width / (float)state.height;
+        state.world = world;
         state.q_scene = q_buffers->query;
         state.ambient_light = canvas[i].ambient_light;
         state.shadow_map = r[i].shadow_pass.color_target;
@@ -322,14 +323,14 @@ void FlecsSystemsSokolImport(
 
     ECS_IMPORT(world, FlecsSystemsSokolGeometry);
 
-    ECS_SYSTEM(world, SokolSetRenderer, EcsOnSet,
+    ECS_OBSERVER(world, SokolSetRenderer, EcsOnSet,
         flecs.systems.sdl2.window.Window,
         flecs.components.gui.Canvas,
-        :Renderer,
-        :Geometry,
-        :Material);
+        Renderer(),
+        Geometry(),
+        Material());
 
-    ECS_SYSTEM(world, SokolUnsetRenderer, EcsUnSet, 
+    ECS_OBSERVER(world, SokolUnsetRenderer, EcsUnSet, 
         Renderer);
 
     ECS_SYSTEM(world, SokolRegisterMaterial, EcsPostLoad,
@@ -341,8 +342,8 @@ void FlecsSystemsSokolImport(
     ECS_SYSTEM(world, SokolRender, EcsOnStore, 
         Renderer, 
         flecs.components.gui.Canvas, 
-        flecs.system.Query FOR Geometry,
-        flecs.system.Query FOR Material,
-        :flecs.components.graphics.Camera,
-        :flecs.components.graphics.DirectionalLight);      
+        (flecs.core.Query, Geometry),
+        (flecs.core.Query, Material),
+        flecs.components.graphics.Camera(),
+        flecs.components.graphics.DirectionalLight());
 }

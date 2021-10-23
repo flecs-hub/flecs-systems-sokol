@@ -21,7 +21,7 @@ void sokol_get_near_far_rect(
 
 static
 void corner(vec3 center, ecs_rect_t r, vec3 v_offset, vec3 h_offset, vec3 v) {
-    vec3 c, h;
+    vec3 c; // , h;
     glm_vec3_copy(center, c);
 
     glm_vec3_add(c, h_offset, c);

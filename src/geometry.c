@@ -19,10 +19,10 @@ ECS_DTOR(SokolGeometry, ptr, {
 
 static
 void populate_rectangle(ecs_iter_t *qit, int32_t offset, mat4 *transforms) {
-    EcsRectangle *r = ecs_column(qit, EcsRectangle, 2);
+    EcsRectangle *r = ecs_term(qit, EcsRectangle, 2);
 
     int i;
-    if (ecs_is_owned(qit, 2)) {
+    if (ecs_term_is_owned(qit, 2)) {
         for (i = 0; i < qit->count; i ++) {
             vec3 scale = {r[i].width, r[i].height, 1.0};
             glm_scale(transforms[offset + i], scale);
@@ -37,10 +37,10 @@ void populate_rectangle(ecs_iter_t *qit, int32_t offset, mat4 *transforms) {
 
 static
 void populate_box(ecs_iter_t *qit, int32_t offset, mat4 *transforms) {
-    EcsBox *b = ecs_column(qit, EcsBox, 2);
+    EcsBox *b = ecs_term(qit, EcsBox, 2);
     
     int i;
-    if (ecs_is_owned(qit, 2)) {
+    if (ecs_term_is_owned(qit, 2)) {
         for (i = 0; i < qit->count; i ++) {
             vec3 scale = {b[i].width, b[i].height, b[i].depth};
             glm_scale(transforms[offset + i], scale);
@@ -63,7 +63,7 @@ void init_rect(
         world, "flecs.systems.sokol.RectangleGeometry");
     ecs_assert(rect != 0, ECS_INTERNAL_ERROR, NULL);
 
-    SokolGeometry *g = ecs_get_mut_w_entity(world, rect, geometry, NULL);
+    SokolGeometry *g = ecs_get_mut_id(world, rect, geometry, NULL);
     ecs_assert(g != NULL, ECS_INTERNAL_ERROR, NULL);
 
     g->vertex_buffer = resources->rect;
@@ -83,7 +83,7 @@ void init_box(
         world, "flecs.systems.sokol.BoxGeometry");
     ecs_assert(box != 0, ECS_INTERNAL_ERROR, NULL);
 
-    SokolGeometry *g = ecs_get_mut_w_entity(world, box, geometry, NULL);
+    SokolGeometry *g = ecs_get_mut_id(world, box, geometry, NULL);
     ecs_assert(g != NULL, ECS_INTERNAL_ERROR, NULL);
 
     g->vertex_buffer = resources->box;
@@ -112,7 +112,8 @@ void populate_buffer(
     ecs_query_t *query)
 {
     if (ecs_query_changed(query)) {
-        ecs_iter_t qit = ecs_query_iter(query);
+        const ecs_world_t *world = ecs_get_world(query);
+        ecs_iter_t qit = ecs_query_iter(world, query);
 
         /* Count number of instances to ensure GPU buffers are big enough */
         int32_t count = 0;
@@ -145,24 +146,24 @@ void populate_buffer(
             int32_t cursor = 0;
             int i;
 
-            ecs_iter_t qit = ecs_query_iter(query);
+            ecs_iter_t qit = ecs_query_iter(world, query);
             while (ecs_query_next(&qit)) {
-                EcsTransform3 *t = ecs_column(&qit, EcsTransform3, 1);
-                SokolMaterial *mat = ecs_column(&qit, SokolMaterial, 3);
-                EcsRgb *c = ecs_column(&qit, EcsRgb, 4);
+                EcsTransform3 *t = ecs_term(&qit, EcsTransform3, 1);
+                SokolMaterial *mat = ecs_term(&qit, SokolMaterial, 3);
+                EcsRgb *c = ecs_term(&qit, EcsRgb, 4);
 
-                if (ecs_is_owned(&qit, 4)) {
+                if (ecs_term_is_owned(&qit, 4)) {
                     for (i = 0; i < qit.count; i ++) {
-                        colors[cursor + i].r = c[i].value.r;
-                        colors[cursor + i].g = c[i].value.g;
-                        colors[cursor + i].b = c[i].value.b;
+                        colors[cursor + i].r = c[i].r;
+                        colors[cursor + i].g = c[i].g;
+                        colors[cursor + i].b = c[i].b;
                         colors[cursor + i].a = 0;
                     }
                 } else {
                     for (i = 0; i < qit.count; i ++) {
-                        colors[cursor + i].r = c->value.r;
-                        colors[cursor + i].g = c->value.g;
-                        colors[cursor + i].b = c->value.b;
+                        colors[cursor + i].r = c->r;
+                        colors[cursor + i].g = c->g;
+                        colors[cursor + i].b = c->b;
                         colors[cursor + i].a = 0;
                     }
                 }
@@ -229,8 +230,8 @@ static
 void SokolPopulateGeometry(
     ecs_iter_t *it) 
 {
-    SokolGeometry *g = ecs_column(it, SokolGeometry, 1);
-    SokolGeometryQuery *q = ecs_column(it, SokolGeometryQuery, 2);
+    SokolGeometry *g = ecs_term(it, SokolGeometry, 1);
+    SokolGeometryQuery *q = ecs_term(it, SokolGeometryQuery, 2);
 
     int i;
     for (i = 0; i < it->count; i ++) {
@@ -243,7 +244,9 @@ void SokolPopulateGeometry(
 static 
 void CreateGeometryQueries(ecs_iter_t *it) {
     ecs_world_t *world = it->world;
-    SokolGeometryQuery *sb = ecs_column(it, SokolGeometryQuery, 1);
+    SokolGeometryQuery *sb = ecs_term(it, SokolGeometryQuery, 1);
+
+    printf("create component queries\n");
 
     int i;
     for (i = 0; i < it->count; i ++) {
@@ -251,8 +254,8 @@ void CreateGeometryQueries(ecs_iter_t *it) {
         char expr[255], subexpr[512];
         sprintf(expr, 
             "[in] flecs.components.transform.Transform3,"
-            "[in] ANY:%s,"
-            "[in] ?SHARED:flecs.systems.sokol.Material",
+            "[in] %s(self|super),"
+            "[in] ?flecs.systems.sokol.Material(super)",
                 comp_path);
         ecs_os_free(comp_path);
 
@@ -260,25 +263,34 @@ void CreateGeometryQueries(ecs_iter_t *it) {
 
         sprintf(subexpr, 
             "%s,"
-            "[in] ANY:flecs.components.graphics.Rgb,"
-            "[in] !SHARED:flecs.components.graphics.Emissive,"
-            "[in] !ANY:flecs.components.graphics.Rgba", 
+            "[in] flecs.components.graphics.Rgb(self|super),"
+            "[in] !flecs.components.graphics.Emissive(super),"
+            "[in] !flecs.components.graphics.Rgba(self|super)", 
                 expr);
-        sb[i].solid = ecs_subquery_new(world, sb[i].parent_query, subexpr);
+        sb[i].solid = ecs_query_init(world, &(ecs_query_desc_t) {
+            .filter.expr = subexpr,
+            .parent = sb[i].parent_query
+        });
 
         sprintf(subexpr, 
             "%s,"
-            "[in] ANY:flecs.components.graphics.Rgb,"
-            "[in] SHARED:flecs.components.graphics.Emissive,"
-            "[in] !ANY:flecs.components.graphics.Rgba", expr);
-        sb[i].emissive = ecs_subquery_new(world, sb[i].parent_query, subexpr);
+            "[in] flecs.components.graphics.Rgb(self|super),"
+            "[in] flecs.components.graphics.Emissive(super),"
+            "[in] !flecs.components.graphics.Rgba(self|super)", expr);
+        sb[i].emissive = ecs_query_init(world, &(ecs_query_desc_t) {
+            .filter.expr = subexpr,
+            .parent = sb[i].parent_query
+        });
 
         sprintf(subexpr,
             "%s,"
-            "[in] !ANY:flecs.components.graphics.Rgb,"
-            "[in] ANY:flecs.components.graphics.Emissive,"
-            "[in] ANY:flecs.components.graphics.Rgba", expr);
-        sb[i].transparent = ecs_subquery_new(world, sb[i].parent_query, subexpr);
+            "[in] !flecs.components.graphics.Rgb(self|super),"
+            "[in] flecs.components.graphics.Emissive(self|super),"
+            "[in] flecs.components.graphics.Rgba(self|super)", expr);
+        sb[i].transparent = ecs_query_init(world, &(ecs_query_desc_t) {
+            .filter.expr = subexpr,
+            .parent = sb[i].parent_query
+        });
     }
 }
 
@@ -306,18 +318,18 @@ void FlecsSystemsSokolGeometryImport(
     });
 
     /* Create queries for solid, emissive and transparent */
-    ECS_SYSTEM(world, CreateGeometryQueries, EcsOnSet, GeometryQuery);
+    ECS_OBSERVER(world, CreateGeometryQueries, EcsOnSet, GeometryQuery);
 
     /* Support for rectangle primitive */
     ECS_ENTITY(world, SokolRectangleGeometry, Geometry);
         ecs_set(world, SokolRectangleGeometry, SokolGeometryQuery, {
-            .component = ecs_typeid(EcsRectangle)
+            .component = ecs_id(EcsRectangle)
         });
 
     /* Support for box primitive */
     ECS_ENTITY(world, SokolBoxGeometry, Geometry);
         ecs_set(world, SokolBoxGeometry, SokolGeometryQuery, {
-            .component = ecs_typeid(EcsBox)
+            .component = ecs_id(EcsBox)
         });
 
     /* Create system that manages buffers for rectangles */
