@@ -56,7 +56,7 @@ int sokol_effect_add_pass(
             break;
         }
         shd_desc.fs.images[i].name = input->name;
-        shd_desc.fs.images[i].type = SG_IMAGETYPE_2D;
+        shd_desc.fs.images[i].image_type = SG_IMAGETYPE_2D;
         pass->inputs[i] = input->id;
         i ++;
     }
@@ -71,14 +71,14 @@ int sokol_effect_add_pass(
                 [1] = { .buffer_index=0, .format=SG_VERTEXFORMAT_FLOAT2 }
             }
         },
-        .blend = {
-            .color_format = SG_PIXELFORMAT_RGBA8,
-            .depth_format = SG_PIXELFORMAT_DEPTH
-        },        
-        .depth_stencil = {
-            .depth_compare_func = SG_COMPAREFUNC_LESS_EQUAL,
-            .depth_write_enabled = true
-        }
+        .depth = {
+            .pixel_format = SG_PIXELFORMAT_DEPTH,
+            .compare = SG_COMPAREFUNC_LESS_EQUAL,
+            .write_enabled = true
+        },
+        .colors = {{
+            .pixel_format = SG_PIXELFORMAT_RGBA8
+        }},
     });
 
     pass->pass.color_target = sokol_target_rgba8(pass_desc.width, pass_desc.height);

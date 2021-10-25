@@ -17,7 +17,7 @@ sg_pipeline init_screen_pipeline() {
                 ,
             .images[0] = {
                 .name = "screen",
-                .type = SG_IMAGETYPE_2D
+                .image_type = SG_IMAGETYPE_2D
             }
         }
     });
@@ -32,9 +32,9 @@ sg_pipeline init_screen_pipeline() {
                 [1] = { .buffer_index=0, .format=SG_VERTEXFORMAT_FLOAT2 }
             }
         },
-        .depth_stencil = {
-            .depth_compare_func = SG_COMPAREFUNC_LESS_EQUAL,
-            .depth_write_enabled = false
+        .depth = {
+            .compare = SG_COMPAREFUNC_LESS_EQUAL,
+            .write_enabled = false
         }
     });
 }

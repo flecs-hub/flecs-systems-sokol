@@ -35,7 +35,7 @@ sg_pipeline init_scene_pipeline(void) {
             .images = {
                 [0] = {
                     .name = "shadow_map",
-                    .type = SG_IMAGETYPE_2D
+                    .image_type = SG_IMAGETYPE_2D
                 }
             },
             .uniform_blocks = {
@@ -173,15 +173,17 @@ sg_pipeline init_scene_pipeline(void) {
                 [7] = { .buffer_index=4, .offset=48, .format=SG_VERTEXFORMAT_FLOAT4 }
             }
         },
-        .blend = {
-            .color_format = SG_PIXELFORMAT_RGBA16F,
-            .depth_format = SG_PIXELFORMAT_DEPTH
+
+        .depth = {
+            .pixel_format = SG_PIXELFORMAT_DEPTH,
+            .compare = SG_COMPAREFUNC_LESS_EQUAL,
+            .write_enabled = false
         },
-        .depth_stencil = {
-            .depth_compare_func = SG_COMPAREFUNC_LESS_EQUAL,
-            .depth_write_enabled = false
-        },
-        .rasterizer.cull_mode = SG_CULLMODE_BACK
+        .colors = {{
+            .pixel_format = SG_PIXELFORMAT_RGBA16F
+        }},
+
+        .cull_mode = SG_CULLMODE_BACK
     });
 }
 
@@ -301,10 +303,13 @@ void sokol_run_scene_pass(
     sg_begin_pass(pass->pass, &pass->pass_action);
     sg_apply_pipeline(pass->pip);
 
-    sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &vs_u, sizeof(vs_uniforms_t));
-    sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &fs_u, sizeof(fs_uniforms_t));
+    sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &(sg_range){&vs_u, sizeof(vs_uniforms_t)});
+    sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &(sg_range){&fs_u, sizeof(fs_uniforms_t)});
+    
     if (mat_u) {
-        sg_apply_uniforms(SG_SHADERSTAGE_VS, 1, mat_u, sizeof(sokol_vs_materials_t));
+        sg_apply_uniforms(SG_SHADERSTAGE_VS, 1, &(sg_range){
+            mat_u, sizeof(sokol_vs_materials_t)
+        });
     }
 
     /* Loop geometry, render scene */

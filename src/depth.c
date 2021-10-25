@@ -84,15 +84,15 @@ sg_pipeline init_depth_pipeline(void) {
                 [4] = { .buffer_index=1, .offset=48, .format=SG_VERTEXFORMAT_FLOAT4 }
             }
         },
-        .blend = {
-            .color_format = SG_PIXELFORMAT_RGBA16F,
-            .depth_format = SG_PIXELFORMAT_DEPTH
+        .depth = {
+            .pixel_format = SG_PIXELFORMAT_DEPTH,
+            .compare = SG_COMPAREFUNC_LESS_EQUAL,
+            .write_enabled = true
         },
-        .depth_stencil = {
-            .depth_compare_func = SG_COMPAREFUNC_LESS_EQUAL,
-            .depth_write_enabled = true
-        },
-        .rasterizer.cull_mode = SG_CULLMODE_BACK
+        .colors = {{
+            .pixel_format = SG_PIXELFORMAT_RGBA16F
+        }},
+        .cull_mode = SG_CULLMODE_BACK
     });
 }
 
@@ -178,8 +178,8 @@ void sokol_run_depth_pass(
     sg_begin_pass(pass->pass, &pass->pass_action);
     sg_apply_pipeline(pass->pip);
 
-    sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &vs_u, sizeof(vs_uniforms_t));
-    sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &fs_u, sizeof(fs_uniforms_t));
+    sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &(sg_range){&vs_u, sizeof(vs_uniforms_t)});
+    sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &(sg_range){&fs_u, sizeof(fs_uniforms_t)});
 
     /* Loop geometry, render scene */
     ecs_iter_t qit = ecs_query_iter(state->world, state->q_scene);

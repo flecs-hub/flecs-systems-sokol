@@ -40,7 +40,7 @@ sokol_offscreen_pass_t sokol_init_shadow_pass(
     result.pass_action  = (sg_pass_action) {
         .colors[0] = { 
             .action = SG_ACTION_CLEAR, 
-            .val = { 1.0f, 1.0f, 1.0f, 1.0f}
+            .value = { 1.0f, 1.0f, 1.0f, 1.0f}
         }
     };
 
@@ -87,15 +87,15 @@ sokol_offscreen_pass_t sokol_init_shadow_pass(
                 [4] = { .buffer_index=1, .offset=48, .format=SG_VERTEXFORMAT_FLOAT4 }
             }
         },
-        .blend = {
-            .color_format = SG_PIXELFORMAT_RGBA8,
-            .depth_format = SG_PIXELFORMAT_DEPTH
+        .depth = {
+            .pixel_format = SG_PIXELFORMAT_DEPTH,
+            .compare = SG_COMPAREFUNC_LESS_EQUAL,
+            .write_enabled = true
         },
-        .depth_stencil = {
-            .depth_compare_func = SG_COMPAREFUNC_LESS_EQUAL,
-            .depth_write_enabled = true
-        },
-        .rasterizer.cull_mode = SG_CULLMODE_FRONT
+        .colors = {{
+            .pixel_format = SG_PIXELFORMAT_RGBA8
+        }},
+        .cull_mode = SG_CULLMODE_FRONT
     });
 
     return result;
@@ -131,7 +131,9 @@ void sokol_run_shadow_pass(
 
     vs_uniforms_t vs_u;
     glm_mat4_copy(state->light_mat_vp, vs_u.mat_vp);
-    sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &vs_u, sizeof(vs_uniforms_t));
+    sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &(sg_range){ 
+        &vs_u, sizeof(vs_uniforms_t) 
+    });
 
     /* Loop buffers, render scene */
     ecs_iter_t qit = ecs_query_iter(state->world, state->q_scene);
@@ -144,5 +146,6 @@ void sokol_run_shadow_pass(
             draw_instances(&geometry[b], &geometry[b].solid);
         }
     }
+
     sg_end_pass();   
 }

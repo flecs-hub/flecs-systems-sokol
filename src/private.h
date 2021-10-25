@@ -89,7 +89,6 @@ typedef struct SokolRenderer {
     sokol_offscreen_pass_t shadow_pass;
     sokol_offscreen_pass_t depth_pass;    
     sokol_offscreen_pass_t scene_pass;
-    sokol_offscreen_pass_t gizmo_pass;
     sokol_screen_pass_t screen_pass;
 
     SokolEffect fx_bloom;
@@ -143,15 +142,6 @@ void sokol_run_scene_pass(
 sokol_screen_pass_t sokol_init_screen_pass(void);
 
 void sokol_run_screen_pass(
-    sokol_screen_pass_t *pass,
-    sokol_resources_t *resources,
-    sokol_render_state_t *state,
-    sg_image target);
-
-/* Gizmo pass */
-sokol_screen_pass_t sokol_init_gizmo_pass(void);
-
-void sokol_run_gizmo_pass(
     sokol_screen_pass_t *pass,
     sokol_resources_t *resources,
     sokol_render_state_t *state,

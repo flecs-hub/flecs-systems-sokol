@@ -219,9 +219,9 @@ void populate_buffer(
                 instances->instance_max = instance_max;
             }
 
-            sg_update_buffer(instances->color_buffer, colors, colors_size);
-            sg_update_buffer(instances->transform_buffer, transforms, transforms_size);
-            sg_update_buffer(instances->material_buffer, materials, materials_size);
+            sg_update_buffer(instances->color_buffer, &(sg_range){colors, colors_size});
+            sg_update_buffer(instances->transform_buffer, &(sg_range){transforms, transforms_size});
+            sg_update_buffer(instances->material_buffer, &(sg_range){materials, materials_size});
         }
     }
 }

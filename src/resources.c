@@ -149,8 +149,7 @@ sg_image sokol_target_depth(
 sg_buffer sokol_buffer_quad(void)
 {
     return sg_make_buffer(&(sg_buffer_desc){
-        .size = sizeof(quad_vertices_uvs),
-        .content = quad_vertices_uvs,
+        .data = { quad_vertices_uvs, sizeof(quad_vertices_uvs) },
         .usage = SG_USAGE_IMMUTABLE
     });
 }
@@ -158,8 +157,7 @@ sg_buffer sokol_buffer_quad(void)
 sg_buffer sokol_buffer_box(void)
 {
     return sg_make_buffer(&(sg_buffer_desc){
-        .size = sizeof(box_vertices),
-        .content = box_vertices,
+        .data = { box_vertices, sizeof(box_vertices) },
         .usage = SG_USAGE_IMMUTABLE
     });
 }
@@ -167,8 +165,7 @@ sg_buffer sokol_buffer_box(void)
 sg_buffer sokol_buffer_box_indices(void)
 {
     return sg_make_buffer(&(sg_buffer_desc){
-        .size = sizeof(box_indices),
-        .content = box_indices,
+        .data = { box_indices, sizeof(box_indices) },
         .type = SG_BUFFERTYPE_INDEXBUFFER,
         .usage = SG_USAGE_IMMUTABLE
     });
@@ -186,8 +183,7 @@ sg_buffer sokol_buffer_box_normals(void)
         box_vertices, box_indices, sokol_box_index_count(), normals);
 
     return sg_make_buffer(&(sg_buffer_desc){
-        .size = sizeof(normals),
-        .content = normals,
+        .data = { normals, sizeof(normals) },
         .usage = SG_USAGE_IMMUTABLE
     });
 }
@@ -195,8 +191,7 @@ sg_buffer sokol_buffer_box_normals(void)
 sg_buffer sokol_buffer_rectangle(void)
 {
     return sg_make_buffer(&(sg_buffer_desc){
-        .size = sizeof(rectangle_vertices),
-        .content = rectangle_vertices,
+        .data = { rectangle_vertices, sizeof(rectangle_vertices) },
         .usage = SG_USAGE_IMMUTABLE
     });
 }
@@ -204,8 +199,7 @@ sg_buffer sokol_buffer_rectangle(void)
 sg_buffer sokol_buffer_rectangle_indices(void)
 {
     return sg_make_buffer(&(sg_buffer_desc){
-        .size = sizeof(rectangle_indices),
-        .content = rectangle_indices,
+        .data = { rectangle_indices, sizeof(rectangle_indices) },
         .type = SG_BUFFERTYPE_INDEXBUFFER,
         .usage = SG_USAGE_IMMUTABLE
     });
@@ -223,8 +217,7 @@ sg_buffer sokol_buffer_rectangle_normals(void)
         rectangle_indices, sokol_rectangle_index_count(), normals);
 
     return sg_make_buffer(&(sg_buffer_desc){
-        .size = sizeof(normals),
-        .content = normals,
+        .data = { normals, sizeof(normals) },
         .usage = SG_USAGE_IMMUTABLE
     });
 }
@@ -236,18 +229,17 @@ sg_pass_action sokol_clear_action(
 {
     sg_pass_action action = {0};
     if (clear_color) {
-        action.colors[0].action = SG_ACTION_CLEAR;
-        action.colors[0].val[0] = color.r;
-        action.colors[0].val[1] = color.g;
-        action.colors[0].val[2] = color.b;
-        action.colors[0].val[3] = 1.0f;
+        action.colors[0] = (sg_color_attachment_action){
+            .action = SG_ACTION_CLEAR,
+            .value = {color.r, color.g, color.b, 1.0f}
+        };
     } else {
         action.colors[0].action = SG_ACTION_DONTCARE;
     }
 
     if (clear_depth) {
         action.depth.action = SG_ACTION_CLEAR;
-        action.depth.val = 1.0;
+        action.depth.value = 1.0;
     } else {
         action.depth.action = SG_ACTION_DONTCARE;
     }
