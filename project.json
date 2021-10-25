@@ -10,15 +10,19 @@
             "flecs.components.graphics",
             "flecs.components.transform",
             "flecs.components.geometry",
-            "flecs.systems.transform",
-            "flecs.systems.sdl2",
-            "bake.opengl",
-            "bake.sdl2"
+            "flecs.systems.transform"
         ]
     },
     "lang.c": {
         "${os linux}": {
             "lib": ["m"]
+        },
+        "${os darwin}": {
+            "ldflags": [
+                "-framework Cocoa", 
+                "-framework QuartzCore", 
+                "-framework OpenGL"
+            ]
         }
     } 
 }

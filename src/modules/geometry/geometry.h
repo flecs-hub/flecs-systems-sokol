@@ -1,5 +1,7 @@
-#ifndef SOKOL_GEOMETRY_H
-#define SOKOL_GEOMETRY_H
+#ifndef SOKOL_MODULES_GEOMETRY_H
+#define SOKOL_MODULES_GEOMETRY_H
+
+#include "../../types.h"
 
 typedef enum sokol_buffer_draw_kind_t {
     SokolDrawSolid = 1,

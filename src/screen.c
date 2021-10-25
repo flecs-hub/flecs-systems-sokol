@@ -1,4 +1,4 @@
-#include "private.h"
+#include "private_api.h"
 
 static
 sg_pipeline init_screen_pipeline() {

@@ -1,4 +1,4 @@
-#include "private.h"
+#include "private_api.h"
 
 typedef struct vs_uniforms_t {
     mat4 mat_vp;

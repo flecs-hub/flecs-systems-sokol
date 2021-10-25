@@ -1,4 +1,4 @@
-#include "private.h"
+#include "private_api.h"
 
 static
 const char *shd_threshold =

@@ -1,4 +1,4 @@
-#include "private.h"
+#include "private_api.h"
 
 static
 char* build_fs_shader(

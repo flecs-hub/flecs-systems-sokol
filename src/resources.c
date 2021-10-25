@@ -1,4 +1,4 @@
-#include "private.h"
+#include "private_api.h"
 
 static
 float quad_vertices_uvs[] = {

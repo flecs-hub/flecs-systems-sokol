@@ -1,4 +1,8 @@
-#include "private.h"
+#include "geometry.h"
+#include "../materials/materials.h"
+
+ECS_DECLARE(SokolRectangleGeometry);
+ECS_DECLARE(SokolBoxGeometry);
 
 ECS_CTOR(SokolGeometry, ptr, {
     *ptr = (SokolGeometry) {};
@@ -56,14 +60,10 @@ void populate_box(ecs_iter_t *qit, int32_t offset, mat4 *transforms) {
 static
 void init_rect(
     ecs_world_t *world,
-    ecs_entity_t geometry,
     sokol_resources_t *resources) 
 {
-    ecs_entity_t rect = ecs_lookup_fullpath(
-        world, "flecs.systems.sokol.RectangleGeometry");
-    ecs_assert(rect != 0, ECS_INTERNAL_ERROR, NULL);
-
-    SokolGeometry *g = ecs_get_mut_id(world, rect, geometry, NULL);
+    SokolGeometry *g = ecs_get_mut(
+        world, ecs_id(SokolRectangleGeometry), SokolGeometry, NULL);
     ecs_assert(g != NULL, ECS_INTERNAL_ERROR, NULL);
 
     g->vertex_buffer = resources->rect;
@@ -76,14 +76,10 @@ void init_rect(
 static
 void init_box(
     ecs_world_t *world,
-    ecs_entity_t geometry,
     sokol_resources_t *resources) 
 {
-    ecs_entity_t box = ecs_lookup_fullpath(
-        world, "flecs.systems.sokol.BoxGeometry");
-    ecs_assert(box != 0, ECS_INTERNAL_ERROR, NULL);
-
-    SokolGeometry *g = ecs_get_mut_id(world, box, geometry, NULL);
+    SokolGeometry *g = ecs_get_mut(
+        world, ecs_id(SokolBoxGeometry), SokolGeometry, NULL);
     ecs_assert(g != NULL, ECS_INTERNAL_ERROR, NULL);
 
     g->vertex_buffer = resources->box;
@@ -97,12 +93,8 @@ void sokol_init_geometry(
     ecs_world_t *world,
     sokol_resources_t *resources) 
 {
-    ecs_entity_t geometry = ecs_lookup_fullpath(
-        world, "flecs.systems.sokol.Geometry");
-    ecs_assert(geometry != 0, ECS_INTERNAL_ERROR, NULL);
-    
-    init_rect(world, geometry, resources);
-    init_box(world, geometry, resources);
+    init_rect(world, resources);
+    init_box(world, resources);
 }
 
 static
@@ -149,7 +141,7 @@ void populate_buffer(
             ecs_iter_t qit = ecs_query_iter(world, query);
             while (ecs_query_next(&qit)) {
                 EcsTransform3 *t = ecs_term(&qit, EcsTransform3, 1);
-                SokolMaterial *mat = ecs_term(&qit, SokolMaterial, 3);
+                SokolMaterialId *mat = ecs_term(&qit, SokolMaterialId, 3);
                 EcsRgb *c = ecs_term(&qit, EcsRgb, 4);
 
                 if (ecs_term_is_owned(&qit, 4)) {
@@ -212,7 +204,7 @@ void populate_buffer(
                 });
 
                 instances->material_buffer = sg_make_buffer(&(sg_buffer_desc){
-                    .size = instance_max * sizeof(uint32_t),
+                    .size = instance_max * sizeof(int32_t),
                     .usage = SG_USAGE_STREAM
                 });
 
@@ -253,7 +245,7 @@ void CreateGeometryQueries(ecs_iter_t *it) {
         sprintf(expr, 
             "[in] flecs.components.transform.Transform3,"
             "[in] %s(self|super),"
-            "[in] ?flecs.systems.sokol.Material(super)",
+            "[in] ?flecs.systems.sokol.MaterialId(super)",
                 comp_path);
         ecs_os_free(comp_path);
 
@@ -296,15 +288,13 @@ void FlecsSystemsSokolGeometryImport(
     ecs_world_t *world)
 {
     ECS_MODULE(world, FlecsSystemsSokolGeometry);
-
-    /* Store components in parent sokol scope */
-    ecs_entity_t scope = ecs_lookup_fullpath(world, "flecs.systems.sokol");
-    ecs_set_scope(world, scope);
-
     ECS_IMPORT(world, FlecsComponentsTransform);
     ECS_IMPORT(world, FlecsComponentsGeometry);
     ECS_IMPORT(world, FlecsSystemsTransform);
 
+    /* Store components in parent sokol scope */
+    ecs_entity_t parent = ecs_lookup_fullpath(world, "flecs.systems.sokol");
+    ecs_entity_t module = ecs_set_scope(world, parent);
     ecs_set_name_prefix(world, "Sokol");
 
     ECS_COMPONENT_DEFINE(world, SokolGeometry);
@@ -315,17 +305,19 @@ void FlecsSystemsSokolGeometryImport(
         .dtor = ecs_dtor(SokolGeometry)
     });
 
+    ecs_set_scope(world, module);
+
     /* Create queries for solid, emissive and transparent */
     ECS_OBSERVER(world, CreateGeometryQueries, EcsOnSet, GeometryQuery);
 
     /* Support for rectangle primitive */
-    ECS_ENTITY(world, SokolRectangleGeometry, Geometry);
+    ECS_ENTITY_DEFINE(world, SokolRectangleGeometry, Geometry);
         ecs_set(world, SokolRectangleGeometry, SokolGeometryQuery, {
             .component = ecs_id(EcsRectangle)
         });
 
     /* Support for box primitive */
-    ECS_ENTITY(world, SokolBoxGeometry, Geometry);
+    ECS_ENTITY_DEFINE(world, SokolBoxGeometry, Geometry);
         ecs_set(world, SokolBoxGeometry, SokolGeometryQuery, {
             .component = ecs_id(EcsBox)
         });

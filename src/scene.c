@@ -1,4 +1,4 @@
-#include "private.h"
+#include "private_api.h"
 
 typedef struct vs_uniforms_t {
     mat4 mat_vp;
@@ -25,7 +25,7 @@ sg_pipeline init_scene_pipeline(void) {
                 },
             },
             [1] = {
-                .size = sizeof(sokol_vs_materials_t),
+                .size = sizeof(SokolMaterial) * SOKOL_MAX_MATERIALS,
                 .uniforms = {
                     [0] = { .name="u_materials", .type=SG_UNIFORMTYPE_FLOAT3, .array_count=SOKOL_MAX_MATERIALS}
                 }
@@ -134,7 +134,7 @@ sg_pipeline init_scene_pipeline(void) {
             "    float s = sampleShadowPCF(shadow_map, sm_uv, texel_size, depth);\n"
 
             "    float r_dot_v = max(dot(r, v), 0.0);\n"
-            "    vec4 specular = vec4(specular_power * pow(r_dot_v, shininess) * dot_n_l * u_light_color, 0);\n"
+            "    vec4 specular = vec4(specular_power * pow(r_dot_v, shininess) * u_light_color, 0);\n"
             "    vec4 diffuse = vec4(u_light_color, 0) * dot_n_l;\n"
             "    vec4 light = emissive + clamp(1.0 - emissive, 0, 1.0) * (ambient + s * diffuse);\n"
             "    frag_color = light * color + s * specular;\n"
@@ -292,7 +292,7 @@ void draw_instances(
 void sokol_run_scene_pass(
     sokol_offscreen_pass_t *pass,
     sokol_render_state_t *state,
-    sokol_vs_materials_t *mat_u)
+    SokolMaterials *materials)
 {
     vs_uniforms_t vs_u;
     fs_uniforms_t fs_u;
@@ -306,9 +306,9 @@ void sokol_run_scene_pass(
     sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &(sg_range){&vs_u, sizeof(vs_uniforms_t)});
     sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &(sg_range){&fs_u, sizeof(fs_uniforms_t)});
     
-    if (mat_u) {
+    if (materials->changed) {
         sg_apply_uniforms(SG_SHADERSTAGE_VS, 1, &(sg_range){
-            mat_u, sizeof(sokol_vs_materials_t)
+            materials->array, sizeof(materials->array)
         });
     }
 
