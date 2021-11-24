@@ -42,60 +42,131 @@ void init_light_mat_vp(
     };
     
     glm_mat4_mul(mat_p, light_proj, mat_p);
-    glm_mat4_mul(mat_p, mat_v, state->light_mat_vp);
+    glm_mat4_mul(mat_p, mat_v, state->uniforms.light_mat_vp);
 }
+
+static
+void init_global_uniforms(
+    sokol_render_state_t *state)
+{
+    vec3 eye = {0, 0, -2.0};
+    vec3 center = {0.0, 0.0, 0.0};
+    vec3 up = {0.0, 1.0, 0.0};
+
+    mat4 mat_p;
+    mat4 mat_v;
+
+    /* Compute perspective & lookat matrix */
+    if (state->camera) {
+        EcsCamera cam = *state->camera;
+        if (!cam.fov) {
+            cam.fov = 30;
+        }
+
+        if (!cam.near && !cam.far) {
+            cam.near = 0.1;
+            cam.far = 1000;
+        }
+
+        if (!cam.up[0] && !cam.up[1] && !cam.up[2]) {
+            cam.up[1] = 1.0;
+        }
+
+        glm_perspective(cam.fov, state->aspect, cam.near, cam.far, mat_p);
+        glm_lookat(cam.position, cam.lookat, cam.up, mat_v);
+        glm_vec3_copy(cam.position, state->uniforms.eye_pos);
+    } else {
+        glm_perspective(30, state->aspect, 0.5, 100.0, mat_p);
+        glm_lookat(eye, center, up, mat_v);
+        glm_vec3_copy(eye, state->uniforms.eye_pos);
+    }
+
+    /* Compute view/projection matrix */
+    glm_mat4_mul(mat_p, mat_v, state->uniforms.mat_vp);
+
+    /* Get light parameters */
+    if (state->light) {
+        EcsDirectionalLight l = *state->light;
+        glm_vec3_copy(l.direction, state->uniforms.light_direction);
+        glm_vec3_copy(l.color, state->uniforms.light_color);
+    } else {
+        glm_vec3_zero(state->uniforms.light_direction);
+        glm_vec3_zero(state->uniforms.light_color);
+    }
+
+    glm_vec3_copy((float*)&state->ambient_light, state->uniforms.light_ambient);
+
+    state->uniforms.shadow_map_size = SOKOL_SHADOW_MAP_SIZE;
+}
+
 
 /* Render */
 static
 void SokolRender(ecs_iter_t *it) {
     ecs_world_t *world = it->world;
     SokolRenderer *r = ecs_term(it, SokolRenderer, 1);
-    EcsCanvas *canvas = ecs_term(it, EcsCanvas, 2);
-    SokolMaterials *materials = ecs_term(it, SokolMaterials, 3);
-    EcsQuery *q_buffers = ecs_term(it, EcsQuery, 4);
+    EcsQuery *q_buffers = ecs_term(it, EcsQuery, 2);
     sokol_render_state_t state = {0};
 
+    if (it->count > 1) {
+        ecs_err("sokol: multiple canvas instances unsupported");
+    }
+
+    /* Initialize renderer state */
     state.delta_time = it->delta_time;
+    state.width = sapp_width();
+    state.height = sapp_height();
+    state.aspect = (float)state.width / (float)state.height;
+    state.world = world;
+    state.q_scene = q_buffers->query;
+    state.shadow_map = r->shadow_pass.color_target;
 
-    for (int32_t i = 0; i < it->count; i ++) {
-        state.width = sapp_width();
-        state.height = sapp_height();
-        state.aspect = (float)state.width / (float)state.height;
-        state.world = world;
-        state.q_scene = q_buffers->query;
-        state.ambient_light = canvas[i].ambient_light;
-        state.shadow_map = r[i].shadow_pass.color_target;
+    /* Load active camera & light data from canvas */
+    const EcsCanvas *canvas = ecs_get(world, r->canvas, EcsCanvas);
+    if (canvas->camera) {
+        state.camera = ecs_get(world, canvas->camera, EcsCamera);
+    }
 
-        ecs_entity_t camera = canvas[i].camera;
-        if (camera) {
-            state.camera = ecs_get(world, camera, EcsCamera);
-        }
+    state.ambient_light = canvas->ambient_light;
 
-        ecs_entity_t light = canvas[i].directional_light;
-        if (light) {
-            state.light = ecs_get(world, light, EcsDirectionalLight);
-            init_light_mat_vp(&state);
-            sokol_run_shadow_pass(&r[i].shadow_pass, &state);   
-        } else if (!state.ambient_light.r && !state.ambient_light.g && 
-                   !state.ambient_light.b) 
+    if (canvas->directional_light) {
+        state.light = ecs_get(world, canvas->directional_light, 
+            EcsDirectionalLight);
+        init_light_mat_vp(&state);
+        sokol_run_shadow_pass(&r->shadow_pass, &state);  
+    } else {
+        /* Set default ambient light if nothing is configured */
+        if (!state.ambient_light.r && !state.ambient_light.g && 
+            !state.ambient_light.b) 
         {
             state.ambient_light = (EcsRgb){1.0, 1.0, 1.0};
         }
+    }
 
-        sokol_run_depth_pass(&r[i].depth_pass, &state);
-        sokol_run_scene_pass(&r[i].scene_pass, &state, materials);
+    /* Compute uniforms that are shared between passes */
+    init_global_uniforms(&state);
 
-        sg_image target = sokol_effect_run(
-            &r->resources, &r->fx_bloom, 1, (sg_image[]){
-                r->scene_pass.color_target
-            });
+    /* Depth prepass for more efficient drawing */
+    sokol_run_depth_pass(&r->depth_pass, &state);
 
-        target = sokol_effect_run(&r->resources, &r->fx_fog, 2, (sg_image[]){
-            target, r->depth_pass.color_target
+    /* Draw geometry */
+    sokol_run_scene_pass(&r->scene_pass, &state);
+
+    sg_image target = r->scene_pass.color_target;
+
+    /* Add post processing effects */
+    target = sokol_effect_run(
+        &r->resources, &r->fx_bloom, 1, (sg_image[]){
+            target
         });
 
-        sokol_run_screen_pass(&r->screen_pass, &r->resources, &state, target);
-    }
+    // target = sokol_effect_run
+    //     (&r->resources, &r->fx_fog, 2, (sg_image[]){
+    //         target, r->depth_pass.color_target
+    //     });
+
+    /* Present last pass to screen */
+    sokol_run_screen_pass(&r->screen_pass, &r->resources, &state, target);
 }
 
 static
@@ -109,42 +180,46 @@ void SokolInitRenderer(ecs_iter_t *it) {
     ecs_world_t *world = it->world;
     EcsCanvas *canvas = ecs_term(it, EcsCanvas, 1);
 
-    for (int32_t i = 0; i < it->count; i ++) {
-        ecs_trace("#[bold]sokol: initializing renderer");
-        ecs_log_push();
-
-        int w = sapp_width();
-        int h = sapp_height();
-
-        sg_setup(&(sg_desc) {0});
-        assert(sg_isvalid());
-        ecs_trace("sokol: library initialized");
-
-        sokol_resources_t resources = init_resources();
-        sokol_offscreen_pass_t depth_pass = sokol_init_depth_pass(w, h);
-
-        ecs_set(world, it->entities[i], SokolRenderer, {
-            .resources = resources,
-            .depth_pass = depth_pass,
-            .shadow_pass = sokol_init_shadow_pass(SOKOL_SHADOW_MAP_SIZE),
-            .scene_pass = sokol_init_scene_pass(canvas[i].background_color, depth_pass.depth_target, w, h),
-            .screen_pass = sokol_init_screen_pass(),
-            .fx_bloom = sokol_init_bloom(w * 2, h * 2),
-            .fx_fog = sokol_init_fog(w, h)
-        });
-        ecs_trace("sokol: canvas initialized");
-
-        ecs_set(world, it->entities[i], SokolMaterials, { true });
-
-        ecs_set_pair(world, it->entities[i], EcsQuery, ecs_id(SokolGeometry), {
-            ecs_query_new(world, "[in] flecs.systems.sokol.Geometry")
-        });
-
-        sokol_init_geometry(world, &resources);
-        ecs_trace("sokol: static geometry resources initialized");
-
-        ecs_log_pop();
+    if (it->count > 1) {
+        ecs_err("sokol: multiple canvas instances unsupported");
     }
+
+    ecs_trace("#[bold]sokol: initializing renderer");
+    ecs_log_push();
+
+    int w = sapp_width();
+    int h = sapp_height();
+
+    sg_setup(&(sg_desc) {0});
+    assert(sg_isvalid());
+    ecs_trace("sokol: library initialized");
+
+    sokol_resources_t resources = init_resources();
+    sokol_offscreen_pass_t depth_pass = sokol_init_depth_pass(w, h);
+
+    ecs_set(world, SokolRendererInst, SokolRenderer, {
+        .canvas = it->entities[0],
+        .resources = resources,
+        .depth_pass = depth_pass,
+        .shadow_pass = sokol_init_shadow_pass(SOKOL_SHADOW_MAP_SIZE),
+        .scene_pass = sokol_init_scene_pass(canvas->background_color, depth_pass.depth_target, w, h),
+        .screen_pass = sokol_init_screen_pass(),
+        .fx_bloom = sokol_init_bloom(w * 2, h * 2),
+        .fx_fog = sokol_init_fog(w, h)
+    });
+
+    ecs_trace("sokol: canvas initialized");
+
+    ecs_set(world, SokolRendererInst, SokolMaterials, { true });
+
+    ecs_set_pair(world, SokolRendererInst, EcsQuery, ecs_id(SokolGeometry), {
+        ecs_query_new(world, "[in] flecs.systems.sokol.Geometry")
+    });
+
+    sokol_init_geometry(world, &resources);
+    ecs_trace("sokol: static geometry resources initialized");
+
+    ecs_log_pop();
 }
 
 /* Cleanup renderer */
@@ -174,7 +249,7 @@ void FlecsSystemsSokolRendererImport(
     /* System that initializes renderer */
     ECS_SYSTEM(world, SokolInitRenderer, EcsOnLoad,
         flecs.components.gui.Canvas, 
-        [out] !flecs.systems.sokol.Renderer);
+        [out] !$flecs.systems.sokol.Renderer);
 
     /* Configure no_staging for SokolInitRenderer as it needs direct access to
      * the world for creating queries */
@@ -190,8 +265,6 @@ void FlecsSystemsSokolRendererImport(
     /* System that orchestrates the render tasks */
     ECS_SYSTEM(world, SokolRender, EcsOnStore, 
         flecs.systems.sokol.Renderer,
-        flecs.components.gui.Canvas, 
-        flecs.systems.sokol.Materials,
         (flecs.core.Query, Geometry));
 
     /* System that calls sg_commit */

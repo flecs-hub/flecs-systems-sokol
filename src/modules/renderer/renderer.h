@@ -16,9 +16,13 @@ typedef struct SokolRenderer {
 
     SokolEffect fx_bloom;
     SokolEffect fx_fog;
+
+    ecs_entity_t canvas;
 } SokolRenderer;
 
 ECS_COMPONENT_DECLARE(SokolRenderer);
+
+#define SokolRendererInst (ecs_id(SokolRenderer))
 
 void FlecsSystemsSokolRendererImport(
     ecs_world_t *world);

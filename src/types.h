@@ -22,21 +22,34 @@ typedef struct sokol_resources_t {
     sg_buffer box_normals;
 } sokol_resources_t;
 
+typedef struct sokol_global_uniforms_t {
+    mat4 mat_vp;
+    mat4 light_mat_v;
+    mat4 light_mat_vp;
+
+    vec3 light_ambient;
+    vec3 light_direction;
+    vec3 light_color;
+    vec3 eye_pos;
+    float shadow_map_size;
+} sokol_global_uniforms_t;
+
 /* Data that is collected once per frame and that is shared between passes */
 typedef struct sokol_render_state_t {
-    /* Computed by renderer */
     ecs_world_t *world;
     ecs_query_t *q_scene;
+    
     const EcsDirectionalLight *light;
-    ecs_rgb_t ambient_light;
     const EcsCamera *camera;
+
+    ecs_rgb_t ambient_light;
     int32_t width;
     int32_t height;
     float aspect;
     float delta_time;
     float world_time;
-    mat4 light_mat_v;
-    mat4 light_mat_vp;
+
+    sokol_global_uniforms_t uniforms;
     sg_image shadow_map;
 } sokol_render_state_t;
 

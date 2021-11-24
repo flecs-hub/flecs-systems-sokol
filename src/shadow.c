@@ -130,7 +130,7 @@ void sokol_run_shadow_pass(
     sg_apply_pipeline(pass->pip);
 
     vs_uniforms_t vs_u;
-    glm_mat4_copy(state->light_mat_vp, vs_u.mat_vp);
+    glm_mat4_copy(state->uniforms.light_mat_vp, vs_u.mat_vp);
     sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &(sg_range){ 
         &vs_u, sizeof(vs_uniforms_t) 
     });

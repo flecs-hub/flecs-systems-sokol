@@ -9,7 +9,6 @@
 
 void sokol_run_scene_pass(
     sokol_offscreen_pass_t *pass,
-    sokol_render_state_t *state,
-    SokolMaterials *mat_u);
+    sokol_render_state_t *state);
 
 #endif

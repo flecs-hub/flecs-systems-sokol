@@ -23,13 +23,7 @@ sg_pipeline init_scene_pipeline(void) {
                     [0] = { .name="u_mat_vp", .type=SG_UNIFORMTYPE_MAT4 },
                     [1] = { .name="u_light_vp", .type=SG_UNIFORMTYPE_MAT4 }
                 },
-            },
-            [1] = {
-                .size = sizeof(SokolMaterial) * SOKOL_MAX_MATERIALS,
-                .uniforms = {
-                    [0] = { .name="u_materials", .type=SG_UNIFORMTYPE_FLOAT3, .array_count=SOKOL_MAX_MATERIALS}
-                }
-            } 
+            }
         },
         .fs = {
             .images = {
@@ -55,11 +49,10 @@ sg_pipeline init_scene_pipeline(void) {
             "#version 330\n"
             "uniform mat4 u_mat_vp;\n"
             "uniform mat4 u_light_vp;\n"
-            "uniform vec3 u_materials[255];\n"
             "layout(location=0) in vec4 v_position;\n"
             "layout(location=1) in vec3 v_normal;\n"
             "layout(location=2) in vec4 i_color;\n"
-            "layout(location=3) in uint i_material;\n"
+            "layout(location=3) in vec3 i_material;\n"
             "layout(location=4) in mat4 i_mat_m;\n"
             "out vec4 position;\n"
             "out vec4 light_position;\n"
@@ -73,7 +66,7 @@ sg_pipeline init_scene_pipeline(void) {
             "  position = (i_mat_m * v_position);\n"
             "  normal = (i_mat_m * vec4(v_normal, 0.0)).xyz;\n"
             "  color = i_color;\n"
-            "  material = u_materials[i_material];\n"
+            "  material = i_material;\n"
             "}\n",
         .fs.source =
             "#version 330\n"
@@ -116,14 +109,14 @@ sg_pipeline init_scene_pipeline(void) {
 
             "void main() {\n"
             "  float specular_power = material.x;\n"
-            "  float shininess = material.y;\n"
+            "  float shininess = max(material.y, 1.0);\n"
             "  float emissive = material.z;\n"
             "  vec4 ambient = vec4(u_light_ambient, 0);\n"
             "  vec3 l = normalize(u_light_direction);\n"
             "  vec3 n = normalize(normal);\n"
-            "  float dot_n_l = dot(n, l);\n"
+            "  float n_dot_l = dot(n, l);\n"
 
-            "  if (dot_n_l >= 0.0) {"
+            "  if (n_dot_l >= 0.0) {"
             "    vec3 v = normalize(u_eye_pos - position.xyz);\n"
             "    vec3 r = reflect(-l, n);\n"
 
@@ -134,10 +127,13 @@ sg_pipeline init_scene_pipeline(void) {
             "    float s = sampleShadowPCF(shadow_map, sm_uv, texel_size, depth);\n"
 
             "    float r_dot_v = max(dot(r, v), 0.0);\n"
-            "    vec4 specular = vec4(specular_power * pow(r_dot_v, shininess) * u_light_color, 0);\n"
-            "    vec4 diffuse = vec4(u_light_color, 0) * dot_n_l;\n"
-            "    vec4 light = emissive + clamp(1.0 - emissive, 0, 1.0) * (ambient + s * diffuse);\n"
-            "    frag_color = light * color + s * specular;\n"
+            "    float l_shiny = pow(r_dot_v * n_dot_l, shininess);\n"
+            "    vec4 l_specular = vec4(specular_power * l_shiny * u_light_color, 0);\n"
+            "    vec4 l_diffuse = vec4(u_light_color, 0) * n_dot_l;\n"
+            "    float l_emissive = emissive + clamp(1.0 - emissive, 0, 1.0);\n"
+            "    vec4 l_light = l_emissive * (ambient + s * l_diffuse);\n"
+
+            "    frag_color = l_light * color + s * l_specular;\n"
             "  } else {\n"
             "    vec4 light = emissive + clamp(1.0 - emissive, 0, 1.0) * (ambient);\n"
             "    frag_color = light * color;\n"
@@ -151,7 +147,7 @@ sg_pipeline init_scene_pipeline(void) {
         .layout = {
             .buffers = {
                 [2] = { .stride = 16, .step_func=SG_VERTEXSTEP_PER_INSTANCE },
-                [3] = { .stride = 4,  .step_func=SG_VERTEXSTEP_PER_INSTANCE },
+                [3] = { .stride = 12, .step_func=SG_VERTEXSTEP_PER_INSTANCE },
                 [4] = { .stride = 64, .step_func=SG_VERTEXSTEP_PER_INSTANCE }
             },
 
@@ -163,8 +159,8 @@ sg_pipeline init_scene_pipeline(void) {
                 /* Color buffer (per instance) */
                 [2] = { .buffer_index=2, .offset=0, .format=SG_VERTEXFORMAT_FLOAT4 },
 
-                /* Material id buffer (per instance) */
-                [3] = { .buffer_index=3, .offset=0, .format=SG_VERTEXFORMAT_FLOAT },                
+                /* Material buffer (per instance) */
+                [3] = { .buffer_index=3, .offset=0, .format=SG_VERTEXFORMAT_FLOAT3 },                
 
                 /* Matrix (per instance) */
                 [4] = { .buffer_index=4, .offset=0,  .format=SG_VERTEXFORMAT_FLOAT4 },
@@ -179,6 +175,7 @@ sg_pipeline init_scene_pipeline(void) {
             .compare = SG_COMPAREFUNC_LESS_EQUAL,
             .write_enabled = false
         },
+
         .colors = {{
             .pixel_format = SG_PIXELFORMAT_RGBA16F
         }},
@@ -205,62 +202,6 @@ sokol_offscreen_pass_t sokol_init_scene_pass(
         .color_target = color_target,
         .depth_target = depth_target
     };   
-}
-
-static
-void init_uniforms(
-    sokol_render_state_t *state,
-    vs_uniforms_t *vs_out,
-    fs_uniforms_t *fs_out)
-{
-    vec3 eye = {0, 0, -2.0};
-    vec3 center = {0.0, 0.0, 0.0};
-    vec3 up = {0.0, 1.0, 0.0};
-
-    mat4 mat_p;
-    mat4 mat_v;
-
-    /* Compute perspective & lookat matrix */
-    if (state->camera) {
-        EcsCamera cam = *state->camera;
-        if (!cam.fov) {
-            cam.fov = 30;
-        }
-
-        if (!cam.near && !cam.far) {
-            cam.near = 0.1;
-            cam.far = 1000;
-        }
-
-        if (!cam.up[0] && !cam.up[1] && !cam.up[2]) {
-            cam.up[1] = 1.0;
-        }
-
-        glm_perspective(cam.fov, state->aspect, cam.near, cam.far, mat_p);
-        glm_lookat(cam.position, cam.lookat, cam.up, mat_v);
-        glm_vec3_copy(cam.position, fs_out->eye_pos);
-    } else {
-        glm_perspective(30, state->aspect, 0.5, 100.0, mat_p);
-        glm_lookat(eye, center, up, mat_v);
-        glm_vec3_copy(eye, fs_out->eye_pos);
-    }
-
-    /* Compute view/projection matrix */
-    glm_mat4_mul(mat_p, mat_v, vs_out->mat_vp);
-
-    /* Get light parameters */
-    if (state->light) {
-        EcsDirectionalLight l = *state->light;
-        glm_vec3_copy(l.direction, fs_out->light_direction);
-        glm_vec3_copy(l.color, fs_out->light_color);
-    } else {
-        glm_vec3_zero(fs_out->light_direction);
-        glm_vec3_zero(fs_out->light_color);
-    }
-
-    glm_vec3_copy((float*)&state->ambient_light, fs_out->light_ambient);
-
-    fs_out->shadow_map_size = SOKOL_SHADOW_MAP_SIZE;
 }
 
 static
@@ -291,13 +232,18 @@ void draw_instances(
 
 void sokol_run_scene_pass(
     sokol_offscreen_pass_t *pass,
-    sokol_render_state_t *state,
-    SokolMaterials *materials)
+    sokol_render_state_t *state)
 {
     vs_uniforms_t vs_u;
+    glm_mat4_copy(state->uniforms.mat_vp, vs_u.mat_vp);
+    glm_mat4_copy(state->uniforms.light_mat_vp, vs_u.light_mat_vp);
+    
     fs_uniforms_t fs_u;
-    glm_mat4_copy(state->light_mat_vp, vs_u.light_mat_vp);
-    init_uniforms(state, &vs_u, &fs_u);
+    glm_vec3_copy(state->uniforms.light_ambient, fs_u.light_ambient);
+    glm_vec3_copy(state->uniforms.light_direction, fs_u.light_direction);
+    glm_vec3_copy(state->uniforms.light_color, fs_u.light_color);
+    glm_vec3_copy(state->uniforms.eye_pos, fs_u.eye_pos);
+    fs_u.shadow_map_size = state->uniforms.shadow_map_size;
 
     /* Render to offscreen texture so screen-space effects can be applied */
     sg_begin_pass(pass->pass, &pass->pass_action);
@@ -305,12 +251,6 @@ void sokol_run_scene_pass(
 
     sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &(sg_range){&vs_u, sizeof(vs_uniforms_t)});
     sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &(sg_range){&fs_u, sizeof(fs_uniforms_t)});
-    
-    if (materials->changed) {
-        sg_apply_uniforms(SG_SHADERSTAGE_VS, 1, &(sg_range){
-            materials->array, sizeof(materials->array)
-        });
-    }
 
     /* Loop geometry, render scene */
     ecs_iter_t qit = ecs_query_iter(state->world, state->q_scene);

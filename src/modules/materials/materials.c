@@ -82,9 +82,9 @@ void FlecsSystemsSokolMaterialsImport(
 
     /* Query that finds all entities with material properties */
     const char *material_query = 
-        "[in] flecs.systems.sokol.MaterialId,"
-        "[in] ?flecs.components.graphics.Specular,"
-        "[in] ?flecs.components.graphics.Emissive,"
+        "[in] flecs.systems.sokol.MaterialId(self),"
+        "[in] ?flecs.components.graphics.Specular(self),"
+        "[in] ?flecs.components.graphics.Emissive(self),"
         "     ?Prefab";
 
     /* System that initializes material array that's sent to vertex shader */
@@ -100,7 +100,7 @@ void FlecsSystemsSokolMaterialsImport(
     /* Assigns material id to entities with material properties */
     ECS_SYSTEM(world, SokolRegisterMaterial, EcsPostLoad,
         [out] !flecs.systems.sokol.MaterialId,
-        [in]   flecs.components.graphics.Specular || 
-               flecs.components.graphics.Emissive,
+        [in]   flecs.components.graphics.Specular(self) || 
+               flecs.components.graphics.Emissive(self),
                ?Prefab);
 }

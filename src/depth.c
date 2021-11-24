@@ -38,7 +38,7 @@ const char* sokol_fs_depth(void)
 
             "void main() {\n"
             "  float depth = length(position);\n"
-            "  frag_color = vec4(depth, depth, depth, 1.0);\n"
+            "  frag_color = encodeDepth(depth);\n"
             "}\n";
 }
 
@@ -171,8 +171,10 @@ void sokol_run_depth_pass(
     sokol_render_state_t *state)
 {
     vs_uniforms_t vs_u;
+    glm_mat4_copy(state->uniforms.mat_vp, vs_u.mat_vp);
+    
     fs_uniforms_t fs_u;
-    init_uniforms(state, &vs_u, &fs_u);
+    glm_vec3_copy(state->uniforms.eye_pos, fs_u.eye_pos);
 
     /* Render to offscreen texture so screen-space effects can be applied */
     sg_begin_pass(pass->pass, &pass->pass_action);

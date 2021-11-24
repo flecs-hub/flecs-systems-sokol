@@ -2,6 +2,8 @@
 #define SOKOL_MODULES_GEOMETRY_H
 
 #include "../../types.h"
+#include "../renderer/renderer.h"
+#include "../materials/materials.h"
 
 typedef enum sokol_buffer_draw_kind_t {
     SokolDrawSolid = 1,
@@ -23,7 +25,7 @@ typedef struct sokol_instances_t {
     /* Application-cached buffers */
     ecs_rgba_t *colors;
     mat4 *transforms;
-    uint32_t *materials;
+    SokolMaterial *materials;
 
     /* Number of instances */
     int32_t instance_count;

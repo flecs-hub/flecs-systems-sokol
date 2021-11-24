@@ -55,7 +55,7 @@ int sokol_run_action(
         .frame_userdata_cb = (void(*)(void*))sokol_frame_action,
         .user_data = &ctx,
         .sample_count = 2,
-        .gl_force_gles2 = true,
+        .gl_force_gles2 = false,
         .window_title = title,
         .width = width,
         .height = height,

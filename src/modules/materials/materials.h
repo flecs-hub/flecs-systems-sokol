@@ -16,7 +16,7 @@
 
 /* Component with material id, assigned to any entity that has material data */
 typedef struct {
-    uint16_t material_id;
+    uint32_t material_id;
 } SokolMaterialId;
 
 /* Element with material parameters */

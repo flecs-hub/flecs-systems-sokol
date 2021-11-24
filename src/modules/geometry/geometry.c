@@ -116,14 +116,18 @@ void populate_buffer(
         if (!count) {
             instances->instance_count = 0;
         } else {
+            /* Fetch materials buffer */
+            const SokolMaterials *render_materials = ecs_get(
+                world, SokolRendererInst, SokolMaterials);
+
             /* Make sure application buffers are large enough */
             ecs_rgba_t *colors = instances->colors;
             mat4 *transforms = instances->transforms;
-            uint32_t *materials = instances->materials;
+            SokolMaterial *materials = instances->materials;
 
             int colors_size = count * sizeof(ecs_rgba_t);
             int transforms_size = count * sizeof(EcsTransform3);
-            int materials_size = count * sizeof(uint32_t);
+            int materials_size = count * sizeof(SokolMaterial);
 
             int32_t instance_count = instances->instance_count;
             int32_t instance_max = instances->instance_max;
@@ -163,7 +167,8 @@ void populate_buffer(
                 if (mat) {
                     uint16_t material_id = mat->material_id;
                     for (i = 0; i < qit.count; i ++) {
-                        materials[cursor + i] = material_id;
+                        materials[cursor + i] = 
+                            render_materials->array[material_id];
                     }
                 } else {
                     memset(&materials[cursor], 0, qit.count * sizeof(uint32_t));
@@ -204,7 +209,7 @@ void populate_buffer(
                 });
 
                 instances->material_buffer = sg_make_buffer(&(sg_buffer_desc){
-                    .size = instance_max * sizeof(int32_t),
+                    .size = instance_max * sizeof(SokolMaterial),
                     .usage = SG_USAGE_STREAM
                 });
 
@@ -249,7 +254,10 @@ void CreateGeometryQueries(ecs_iter_t *it) {
                 comp_path);
         ecs_os_free(comp_path);
 
-        sb[i].parent_query = ecs_query_new(world, expr);
+        sb[i].parent_query = ecs_query_init(world, &(ecs_query_desc_t) {
+            .filter.expr = expr,
+            .filter.instanced = true
+        });
 
         sprintf(subexpr, 
             "%s,"
@@ -259,6 +267,7 @@ void CreateGeometryQueries(ecs_iter_t *it) {
                 expr);
         sb[i].solid = ecs_query_init(world, &(ecs_query_desc_t) {
             .filter.expr = subexpr,
+            .filter.instanced = true,
             .parent = sb[i].parent_query
         });
 
@@ -269,6 +278,7 @@ void CreateGeometryQueries(ecs_iter_t *it) {
             "[in] !flecs.components.graphics.Rgba(self|super)", expr);
         sb[i].emissive = ecs_query_init(world, &(ecs_query_desc_t) {
             .filter.expr = subexpr,
+            .filter.instanced = true,
             .parent = sb[i].parent_query
         });
 
@@ -279,6 +289,7 @@ void CreateGeometryQueries(ecs_iter_t *it) {
             "[in] flecs.components.graphics.Rgba(self|super)", expr);
         sb[i].transparent = ecs_query_init(world, &(ecs_query_desc_t) {
             .filter.expr = subexpr,
+            .filter.instanced = true,
             .parent = sb[i].parent_query
         });
     }
