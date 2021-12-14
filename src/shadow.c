@@ -1,8 +1,8 @@
 #include "private_api.h"
 
-typedef struct vs_uniforms_t {
+typedef struct shadow_vs_uniforms_t {
     mat4 mat_vp;
-} vs_uniforms_t;
+} shadow_vs_uniforms_t;
 
 static const char *shd_v = 
     "#version 330\n"
@@ -35,7 +35,7 @@ static const char *shd_f =
 sokol_offscreen_pass_t sokol_init_shadow_pass(
     int size)
 {
-    sokol_offscreen_pass_t result = {};
+    sokol_offscreen_pass_t result = {0};
 
     result.pass_action  = (sg_pass_action) {
         .colors[0] = { 
@@ -56,7 +56,7 @@ sokol_offscreen_pass_t sokol_init_shadow_pass(
     sg_shader shd = sg_make_shader(&(sg_shader_desc){
         .vs.uniform_blocks = {
             [0] = {
-                .size = sizeof(vs_uniforms_t),
+                .size = sizeof(shadow_vs_uniforms_t),
                 .uniforms = {
                     [0] = { .name="u_mat_vp", .type=SG_UNIFORMTYPE_MAT4 },
                 },
@@ -102,7 +102,7 @@ sokol_offscreen_pass_t sokol_init_shadow_pass(
 }
 
 static
-void draw_instances(
+void shadow_draw_instances(
     SokolGeometry *geometry,
     sokol_instances_t *instances)
 {
@@ -129,10 +129,10 @@ void sokol_run_shadow_pass(
     sg_begin_pass(pass->pass, &pass->pass_action);
     sg_apply_pipeline(pass->pip);
 
-    vs_uniforms_t vs_u;
+    shadow_vs_uniforms_t vs_u;
     glm_mat4_copy(state->uniforms.light_mat_vp, vs_u.mat_vp);
     sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &(sg_range){ 
-        &vs_u, sizeof(vs_uniforms_t) 
+        &vs_u, sizeof(shadow_vs_uniforms_t) 
     });
 
     /* Loop buffers, render scene */
@@ -143,7 +143,7 @@ void sokol_run_shadow_pass(
         int b;
         for (b = 0; b < qit.count; b ++) {
             /* Only draw solids, ignore emissive and transparent (for now) */
-            draw_instances(&geometry[b], &geometry[b].solid);
+            shadow_draw_instances(&geometry[b], &geometry[b].solid);
         }
     }
 

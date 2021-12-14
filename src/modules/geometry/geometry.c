@@ -5,8 +5,8 @@ ECS_DECLARE(SokolRectangleGeometry);
 ECS_DECLARE(SokolBoxGeometry);
 
 ECS_CTOR(SokolGeometry, ptr, {
-    *ptr = (SokolGeometry) {};
-});
+    *ptr = (SokolGeometry) {0};
+})
 
 static 
 void free_buffer(sokol_instances_t *b) {
@@ -19,7 +19,7 @@ ECS_DTOR(SokolGeometry, ptr, {
     free_buffer(&ptr->solid);
     free_buffer(&ptr->emissive);
     free_buffer(&ptr->transparent);
-});
+})
 
 static
 void populate_rectangle(ecs_iter_t *qit, int32_t offset, mat4 *transforms) {

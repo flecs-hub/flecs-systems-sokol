@@ -8,7 +8,11 @@
 #define SOKOL_NO_ENTRY
 
 /* Select graphics API implementation */
+#ifdef __EMSCRIPTEN__
+#define SOKOL_GLES3
+#else
 #define SOKOL_GLCORE33
+#endif
 
 #include "sokol_gfx.h"
 #include "sokol_app.h"

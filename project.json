@@ -23,6 +23,9 @@
                 "-framework QuartzCore", 
                 "-framework OpenGL"
             ]
+        },
+        "${target em}": {
+            "ldflags": ["-s USE_WEBGL2=1"]
         }
     } 
 }

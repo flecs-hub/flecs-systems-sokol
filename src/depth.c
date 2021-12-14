@@ -1,12 +1,12 @@
 #include "private_api.h"
 
-typedef struct vs_uniforms_t {
+typedef struct depth_vs_uniforms_t {
     mat4 mat_vp;
-} vs_uniforms_t;
+} depth_vs_uniforms_t;
 
-typedef struct fs_uniforms_t {
+typedef struct depth_fs_uniforms_t {
     vec3 eye_pos;    
-} fs_uniforms_t;
+} depth_fs_uniforms_t;
 
 const char* sokol_vs_depth(void) 
 {
@@ -47,7 +47,7 @@ sg_pipeline init_depth_pipeline(void) {
     sg_shader shd = sg_make_shader(&(sg_shader_desc){
         .vs.uniform_blocks = {
             [0] = {
-                .size = sizeof(vs_uniforms_t),
+                .size = sizeof(depth_vs_uniforms_t),
                 .uniforms = {
                     [0] = { .name="u_mat_vp", .type=SG_UNIFORMTYPE_MAT4 }
                 },
@@ -55,7 +55,7 @@ sg_pipeline init_depth_pipeline(void) {
         },
         .fs.uniform_blocks = { 
             [0] = {
-                .size = sizeof(fs_uniforms_t),
+                .size = sizeof(depth_fs_uniforms_t),
                 .uniforms = {
                     [0] = { .name="u_eye_pos", .type=SG_UNIFORMTYPE_FLOAT3 }
                 },
@@ -117,36 +117,7 @@ sokol_offscreen_pass_t sokol_init_depth_pass(
 }
 
 static
-void init_uniforms(
-    sokol_render_state_t *state,
-    vs_uniforms_t *vs_out,
-    fs_uniforms_t *fs_out)
-{
-    vec3 eye = {0, 0, -2.0};
-    vec3 center = {0.0, 0.0, 0.0};
-    vec3 up = {0.0, 1.0, 0.0};
-
-    mat4 mat_p;
-    mat4 mat_v;
-
-    /* Compute perspective & lookat matrix */
-    if (state->camera) {
-        EcsCamera cam = *state->camera;
-        glm_perspective(cam.fov, state->aspect, cam.near, cam.far, mat_p);
-        glm_lookat(cam.position, cam.lookat, cam.up, mat_v);
-        glm_vec3_copy(cam.position, fs_out->eye_pos);
-    } else {
-        glm_perspective(30, state->aspect, 0.5, 100.0, mat_p);
-        glm_lookat(eye, center, up, mat_v);
-        glm_vec3_copy(eye, fs_out->eye_pos);
-    }
-
-    /* Compute view/projection matrix */
-    glm_mat4_mul(mat_p, mat_v, vs_out->mat_vp);
-}
-
-static
-void draw_instances(
+void depth_draw_instances(
     SokolGeometry *geometry,
     sokol_instances_t *instances)
 {
@@ -170,18 +141,18 @@ void sokol_run_depth_pass(
     sokol_offscreen_pass_t *pass,
     sokol_render_state_t *state)
 {
-    vs_uniforms_t vs_u;
+    depth_vs_uniforms_t vs_u;
     glm_mat4_copy(state->uniforms.mat_vp, vs_u.mat_vp);
     
-    fs_uniforms_t fs_u;
+    depth_fs_uniforms_t fs_u;
     glm_vec3_copy(state->uniforms.eye_pos, fs_u.eye_pos);
 
     /* Render to offscreen texture so screen-space effects can be applied */
     sg_begin_pass(pass->pass, &pass->pass_action);
     sg_apply_pipeline(pass->pip);
 
-    sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &(sg_range){&vs_u, sizeof(vs_uniforms_t)});
-    sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &(sg_range){&fs_u, sizeof(fs_uniforms_t)});
+    sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &(sg_range){&vs_u, sizeof(depth_vs_uniforms_t)});
+    sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &(sg_range){&fs_u, sizeof(depth_fs_uniforms_t)});
 
     /* Loop geometry, render scene */
     ecs_iter_t qit = ecs_query_iter(state->world, state->q_scene);
@@ -190,8 +161,8 @@ void sokol_run_depth_pass(
 
         int b;
         for (b = 0; b < qit.count; b ++) {
-            draw_instances(&geometry[b], &geometry[b].solid);
-            draw_instances(&geometry[b], &geometry[b].emissive);
+            depth_draw_instances(&geometry[b], &geometry[b].solid);
+            depth_draw_instances(&geometry[b], &geometry[b].emissive);
         }
     }
     sg_end_pass();

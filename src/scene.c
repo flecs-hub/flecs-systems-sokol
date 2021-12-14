@@ -1,24 +1,24 @@
 #include "private_api.h"
 
-typedef struct vs_uniforms_t {
+typedef struct scene_vs_uniforms_t {
     mat4 mat_vp;
     mat4 light_mat_vp;
-} vs_uniforms_t;
+} scene_vs_uniforms_t;
 
-typedef struct fs_uniforms_t {
+typedef struct scene_fs_uniforms_t {
     vec3 light_ambient;
     vec3 light_direction;
     vec3 light_color;
     vec3 eye_pos;
     float shadow_map_size;
-} fs_uniforms_t;
+} scene_fs_uniforms_t;
 
 sg_pipeline init_scene_pipeline(void) {
     /* create an instancing shader */
     sg_shader shd = sg_make_shader(&(sg_shader_desc){
         .vs.uniform_blocks = {
             [0] = {
-                .size = sizeof(vs_uniforms_t),
+                .size = sizeof(scene_vs_uniforms_t),
                 .uniforms = {
                     [0] = { .name="u_mat_vp", .type=SG_UNIFORMTYPE_MAT4 },
                     [1] = { .name="u_light_vp", .type=SG_UNIFORMTYPE_MAT4 }
@@ -34,7 +34,7 @@ sg_pipeline init_scene_pipeline(void) {
             },
             .uniform_blocks = {
                 [0] = {
-                    .size = sizeof(fs_uniforms_t),
+                    .size = sizeof(scene_fs_uniforms_t),
                     .uniforms = {
                         [0] = { .name="u_light_ambient", .type=SG_UNIFORMTYPE_FLOAT3 },
                         [1] = { .name="u_light_direction", .type=SG_UNIFORMTYPE_FLOAT3 },
@@ -205,7 +205,7 @@ sokol_offscreen_pass_t sokol_init_scene_pass(
 }
 
 static
-void draw_instances(
+void scene_draw_instances(
     SokolGeometry *geometry,
     sokol_instances_t *instances,
     sg_image shadow_map)
@@ -234,11 +234,11 @@ void sokol_run_scene_pass(
     sokol_offscreen_pass_t *pass,
     sokol_render_state_t *state)
 {
-    vs_uniforms_t vs_u;
+    scene_vs_uniforms_t vs_u;
     glm_mat4_copy(state->uniforms.mat_vp, vs_u.mat_vp);
     glm_mat4_copy(state->uniforms.light_mat_vp, vs_u.light_mat_vp);
     
-    fs_uniforms_t fs_u;
+    scene_fs_uniforms_t fs_u;
     glm_vec3_copy(state->uniforms.light_ambient, fs_u.light_ambient);
     glm_vec3_copy(state->uniforms.light_direction, fs_u.light_direction);
     glm_vec3_copy(state->uniforms.light_color, fs_u.light_color);
@@ -249,8 +249,8 @@ void sokol_run_scene_pass(
     sg_begin_pass(pass->pass, &pass->pass_action);
     sg_apply_pipeline(pass->pip);
 
-    sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &(sg_range){&vs_u, sizeof(vs_uniforms_t)});
-    sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &(sg_range){&fs_u, sizeof(fs_uniforms_t)});
+    sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &(sg_range){&vs_u, sizeof(scene_vs_uniforms_t)});
+    sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &(sg_range){&fs_u, sizeof(scene_fs_uniforms_t)});
 
     /* Loop geometry, render scene */
     ecs_iter_t qit = ecs_query_iter(state->world, state->q_scene);
@@ -259,8 +259,8 @@ void sokol_run_scene_pass(
 
         int b;
         for (b = 0; b < qit.count; b ++) {
-            draw_instances(&geometry[b], &geometry[b].solid, state->shadow_map);
-            draw_instances(&geometry[b], &geometry[b].emissive, state->shadow_map);
+            scene_draw_instances(&geometry[b], &geometry[b].solid, state->shadow_map);
+            scene_draw_instances(&geometry[b], &geometry[b].emissive, state->shadow_map);
         }
     }
     sg_end_pass();

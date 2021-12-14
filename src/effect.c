@@ -123,7 +123,7 @@ void effect_pass_draw(
 SokolEffect sokol_effect_init(
     int32_t input_count)
 {
-    SokolEffect fx = {};
+    SokolEffect fx = {0};
     fx.input_count = input_count;
     fx.pass_count = input_count;
     return fx;
