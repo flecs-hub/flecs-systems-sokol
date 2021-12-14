@@ -1,6 +1,9 @@
 #include "geometry.h"
 #include "../materials/materials.h"
 
+ECS_COMPONENT_DECLARE(SokolGeometry);
+ECS_COMPONENT_DECLARE(SokolGeometryQuery);
+
 ECS_DECLARE(SokolRectangleGeometry);
 ECS_DECLARE(SokolBoxGeometry);
 

@@ -12,7 +12,7 @@ const char* sokol_vs_depth(void)
 {
     return  "#version 330\n"
             "uniform mat4 u_mat_vp;\n"
-            "uniform mat4 u_eye_pos;\n"
+            "uniform vec3 u_eye_pos;\n"
             "layout(location=0) in vec4 v_position;\n"
             "layout(location=1) in mat4 i_mat_m;\n"
             "out vec3 position;\n"

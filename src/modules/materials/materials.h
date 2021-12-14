@@ -32,8 +32,8 @@ typedef struct {
     SokolMaterial array[SOKOL_MAX_MATERIALS];
 } SokolMaterials;
 
-ECS_COMPONENT_DECLARE(SokolMaterialId);
-ECS_COMPONENT_DECLARE(SokolMaterials);
+extern ECS_COMPONENT_DECLARE(SokolMaterialId);
+extern ECS_COMPONENT_DECLARE(SokolMaterials);
 
 void FlecsSystemsSokolMaterialsImport(
     ecs_world_t *world);

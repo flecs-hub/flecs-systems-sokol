@@ -1,4 +1,6 @@
-#include "private_api.h"
+#ifndef _MSC_VER
+#pragma GCC diagnostic ignored "-Wpedantic"
+#endif
 
 #ifndef __APPLE__
 #define SOKOL_IMPL
@@ -6,6 +8,7 @@
 
 #define SOKOL_NO_ENTRY
 #include "sokol/sokol.h"
+#include "private_api.h"
 
 /* Application wrapper */
 
@@ -51,7 +54,6 @@ int sokol_run_action(
 
     /* Run app */
     sapp_run(&(sapp_desc) {
-        .init_userdata_cb = (void(*)(void*))desc->init,
         .frame_userdata_cb = (void(*)(void*))sokol_frame_action,
         .user_data = &ctx,
         .sample_count = 2,

@@ -20,7 +20,7 @@ typedef struct SokolRenderer {
     ecs_entity_t canvas;
 } SokolRenderer;
 
-ECS_COMPONENT_DECLARE(SokolRenderer);
+extern ECS_COMPONENT_DECLARE(SokolRenderer);
 
 #define SokolRendererInst (ecs_id(SokolRenderer))
 

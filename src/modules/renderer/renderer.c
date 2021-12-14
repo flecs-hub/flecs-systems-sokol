@@ -1,5 +1,7 @@
 #include "../../private_api.h"
 
+ECS_COMPONENT_DECLARE(SokolRenderer);
+
 static
 sokol_resources_t init_resources(void) {
     return (sokol_resources_t){

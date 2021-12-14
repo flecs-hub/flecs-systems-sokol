@@ -1,5 +1,8 @@
 #include "materials.h"
 
+ECS_COMPONENT_DECLARE(SokolMaterialId);
+ECS_COMPONENT_DECLARE(SokolMaterials);
+
 void SokolInitMaterials(ecs_iter_t *it) {
     const EcsQuery *q = ecs_term(it, EcsQuery, 1);
     SokolMaterials *materials = ecs_term(it, SokolMaterials, 2);
