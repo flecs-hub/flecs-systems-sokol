@@ -67,8 +67,7 @@ int sokol_run_action(
         .window_title = title,
         .width = width,
         .height = height,
-        .high_dpi = true,
-        .icon.sokol_default = true
+        .high_dpi = true
     });
 
     return 0;
