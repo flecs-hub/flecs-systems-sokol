@@ -15,7 +15,7 @@
     },
     "lang.c": {
         "${os linux}": {
-            "lib": ["m", "GL", "X11", "Xi", "Xcursor"]
+            "lib": ["m", "GL", "X11", "Xi", "Xcursor", "dl"]
         },
         "${os darwin}": {
             "ldflags": [
