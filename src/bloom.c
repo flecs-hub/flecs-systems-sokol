@@ -4,47 +4,47 @@ static
 const char *shd_threshold =
     "float thresh = 0.8;\n"
     "vec4 c = texture(tex, uv);\n"
-    "c.r = max(c.r - thresh, 0);\n"
-    "c.g = max(c.g - thresh, 0);\n"
-    "c.b = max(c.b - thresh, 0);\n"
+    "c.r = max(c.r - thresh, 0.0);\n"
+    "c.g = max(c.g - thresh, 0.0);\n"
+    "c.b = max(c.b - thresh, 0.0);\n"
     "frag_color = c;\n";
 
 static
 const char *shd_h_blur =
     "float kernel = 50.0;\n"
     "vec4 sum = vec4(0.0);\n"
-    "float width = 800;\n"
-    "float height = 600;\n"
+    "float width = 800.0;\n"
+    "float height = 600.0;\n"
     "float x = uv.x;\n"
     "float y = uv.y;\n"
     "float i, g;\n"
 
     "kernel = kernel / width;\n"
     "kernel = kernel / (width / height);\n"
-    "for(i=-kernel; i<=kernel; i+=1 / width) {\n"
+    "for(i = -kernel; i <= kernel; i+= 1.0 / width) {\n"
 	"	g = i / kernel;\n"
 	"	g *= g;\n"
-	"	sum += texture(tex, vec2(x + i, y)) * exp(-(g) * 5);\n"
+	"	sum += texture(tex, vec2(x + i, y)) * exp(-(g) * 5.0);\n"
 	"}\n"
-    "frag_color = sum / 20;\n";
+    "frag_color = sum / 20.0;\n";
 
 static
 const char *shd_v_blur =
     "float kernel = 50.0;\n"
     "vec4 sum = vec4(0.0);\n"
-    "float width = 800;\n"
-    "float height = 600;\n"
+    "float width = 800.0;\n"
+    "float height = 600.0;\n"
     "float x = uv.x;\n"
     "float y = uv.y;\n"
     "float i, g;\n"
 
     "kernel = kernel / width;\n"
-    "for(i=-kernel; i<=kernel; i+=1 / width) {\n"
+    "for(i = -kernel; i <= kernel; i+= 1.0 / width) {\n"
 	"	g = i / kernel;\n"
 	"	g *= g;\n"
-	"	sum += texture(tex, vec2(x, y + i)) * exp(-(g) * 5);\n"
+	"	sum += texture(tex, vec2(x, y + i)) * exp(-(g) * 5.0);\n"
 	"}\n"
-    "frag_color = sum / 20;\n";  
+    "frag_color = sum / 20.0;\n";  
 
 static
 const char *shd_blend =
@@ -53,6 +53,8 @@ const char *shd_blend =
 SokolEffect sokol_init_bloom(
     int width, int height)
 {
+    ecs_trace("sokol: initialize bloom effect");
+
     SokolEffect fx = sokol_effect_init(1);
     int blur_w = width * 0.2;
     int blur_h = height * 0.2;

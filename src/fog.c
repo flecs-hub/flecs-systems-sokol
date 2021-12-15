@@ -29,6 +29,8 @@ const char *shd_fog =
 SokolEffect sokol_init_fog(
     int width, int height)
 {
+    ecs_trace("sokol: initialize fog effect");
+
     SokolEffect fx = sokol_effect_init(2);
 
     sokol_effect_add_pass(&fx, (sokol_fx_pass_desc_t){

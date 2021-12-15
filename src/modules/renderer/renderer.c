@@ -162,11 +162,6 @@ void SokolRender(ecs_iter_t *it) {
             target
         });
 
-    // target = sokol_effect_run
-    //     (&r->resources, &r->fx_fog, 2, (sg_image[]){
-    //         target, r->depth_pass.color_target
-    //     });
-
     /* Present last pass to screen */
     sokol_run_screen_pass(&r->screen_pass, &r->resources, &state, target);
 }
@@ -206,8 +201,7 @@ void SokolInitRenderer(ecs_iter_t *it) {
         .shadow_pass = sokol_init_shadow_pass(SOKOL_SHADOW_MAP_SIZE),
         .scene_pass = sokol_init_scene_pass(canvas->background_color, depth_pass.depth_target, w, h),
         .screen_pass = sokol_init_screen_pass(),
-        .fx_bloom = sokol_init_bloom(w * 2, h * 2),
-        .fx_fog = sokol_init_fog(w, h)
+        .fx_bloom = sokol_init_bloom(w * 2, h * 2)
     });
 
     ecs_trace("sokol: canvas initialized");

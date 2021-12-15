@@ -249,7 +249,7 @@ sg_pass_action sokol_clear_action(
 
 const char* sokol_vs_passthrough(void)
 {
-    return  "#version 330\n"
+    return  SOKOL_SHADER_HEADER
             "layout(location=0) in vec4 v_position;\n"
             "layout(location=1) in vec2 v_uv;\n"
             "out vec2 uv;\n"

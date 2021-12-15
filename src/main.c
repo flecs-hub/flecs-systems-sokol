@@ -15,19 +15,22 @@
 typedef struct {
     ecs_world_t *world;
     ecs_app_desc_t *desc;
-} app_ctx_t;
+} sokol_app_ctx_t;
 
 static
-void sokol_frame_action(app_ctx_t *ctx) {
+void sokol_frame_action(sokol_app_ctx_t *ctx) {
     ecs_app_run_frame(ctx->world, ctx->desc);
 }
+
+static
+sokol_app_ctx_t sokol_app_ctx;
 
 static
 int sokol_run_action(
     ecs_world_t *world,
     ecs_app_desc_t *desc)
 {
-    app_ctx_t ctx = {
+    sokol_app_ctx = (sokol_app_ctx_t){
         .world = world,
         .desc = desc
     };
@@ -50,12 +53,15 @@ int sokol_run_action(
     /* If there is more than one canvas, ignore */
     while (ecs_term_next(&it)) { }
 
+    /* Enable time measurements for getting delta_time */
+    ecs_measure_frame_time(world, true);
+
     ecs_trace("sokol: starting app '%s'", title);
 
     /* Run app */
     sapp_run(&(sapp_desc) {
         .frame_userdata_cb = (void(*)(void*))sokol_frame_action,
-        .user_data = &ctx,
+        .user_data = &sokol_app_ctx,
         .sample_count = 2,
         .gl_force_gles2 = false,
         .window_title = title,
@@ -64,8 +70,6 @@ int sokol_run_action(
         .high_dpi = true,
         .icon.sokol_default = true
     });
-
-    ecs_trace("sokol: app '%s' finished", title);
 
     return 0;
 }

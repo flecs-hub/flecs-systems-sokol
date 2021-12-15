@@ -2,12 +2,14 @@
 
 static
 sg_pipeline init_screen_pipeline() {
+    ecs_trace("sokol: initialize screen pipeline");
+
     /* create an instancing shader */
     sg_shader shd = sg_make_shader(&(sg_shader_desc){
         .vs.source = sokol_vs_passthrough(),
         .fs = {
             .source =
-                "#version 330\n"
+                SOKOL_SHADER_HEADER
                 "uniform sampler2D screen;\n"
                 "out vec4 frag_color;\n"
                 "in vec2 uv;\n"

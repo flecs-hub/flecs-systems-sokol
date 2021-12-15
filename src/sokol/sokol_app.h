@@ -5070,6 +5070,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_frame(double time, void* userData) {
         _sapp_discard_state();
         return EM_FALSE;
     }
+
     return EM_TRUE;
 }
 

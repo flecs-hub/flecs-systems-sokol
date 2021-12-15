@@ -10,7 +10,7 @@ typedef struct depth_fs_uniforms_t {
 
 const char* sokol_vs_depth(void) 
 {
-    return  "#version 330\n"
+    return  SOKOL_SHADER_HEADER
             "uniform mat4 u_mat_vp;\n"
             "uniform vec3 u_eye_pos;\n"
             "layout(location=0) in vec4 v_position;\n"
@@ -24,7 +24,7 @@ const char* sokol_vs_depth(void)
 
 const char* sokol_fs_depth(void) 
 {
-    return  "#version 330\n"
+    return  SOKOL_SHADER_HEADER
             "uniform vec3 u_eye_pos;\n"
             "in vec3 position;\n"
             "out vec4 frag_color;\n"
@@ -43,6 +43,8 @@ const char* sokol_fs_depth(void)
 }
 
 sg_pipeline init_depth_pipeline(void) {
+    ecs_trace("sokol: initialize depth pipieline");
+
     /* create an instancing shader */
     sg_shader shd = sg_make_shader(&(sg_shader_desc){
         .vs.uniform_blocks = {

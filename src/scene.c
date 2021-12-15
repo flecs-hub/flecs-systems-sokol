@@ -14,6 +14,8 @@ typedef struct scene_fs_uniforms_t {
 } scene_fs_uniforms_t;
 
 sg_pipeline init_scene_pipeline(void) {
+    ecs_trace("sokol: initialize scene pipieline");
+
     /* create an instancing shader */
     sg_shader shd = sg_make_shader(&(sg_shader_desc){
         .vs.uniform_blocks = {
@@ -45,8 +47,9 @@ sg_pipeline init_scene_pipeline(void) {
                 }
             }
         },
+
         .vs.source =
-            "#version 330\n"
+            SOKOL_SHADER_HEADER
             "uniform mat4 u_mat_vp;\n"
             "uniform mat4 u_light_vp;\n"
             "layout(location=0) in vec4 v_position;\n"
@@ -68,8 +71,9 @@ sg_pipeline init_scene_pipeline(void) {
             "  color = i_color;\n"
             "  material = i_material;\n"
             "}\n",
+
         .fs.source =
-            "#version 330\n"
+            SOKOL_SHADER_HEADER
             "uniform vec3 u_light_ambient;\n"
             "uniform vec3 u_light_direction;\n"
             "uniform vec3 u_light_color;\n"
@@ -104,7 +108,7 @@ sg_pipeline init_scene_pipeline(void) {
             "            result += sampleShadow(shadowMap, uv + vec2(x, y) * texel_size * texel_c, compare);\n"
             "        }\n"
             "    }\n"
-            "    return result / pcf_samples;\n"
+            "    return result / float(pcf_samples);\n"
             "}\n"
 
             "void main() {\n"
@@ -130,12 +134,12 @@ sg_pipeline init_scene_pipeline(void) {
             "    float l_shiny = pow(r_dot_v * n_dot_l, shininess);\n"
             "    vec4 l_specular = vec4(specular_power * l_shiny * u_light_color, 0);\n"
             "    vec4 l_diffuse = vec4(u_light_color, 0) * n_dot_l;\n"
-            "    float l_emissive = emissive + clamp(1.0 - emissive, 0, 1.0);\n"
+            "    float l_emissive = emissive + clamp(1.0 - emissive, 0.0, 1.0);\n"
             "    vec4 l_light = l_emissive * (ambient + s * l_diffuse);\n"
 
             "    frag_color = l_light * color + s * l_specular;\n"
             "  } else {\n"
-            "    vec4 light = emissive + clamp(1.0 - emissive, 0, 1.0) * (ambient);\n"
+            "    vec4 light = emissive + clamp(1.0 - emissive, 0.0, 1.0) * (ambient);\n"
             "    frag_color = light * color;\n"
             "  }\n"
             "}\n"

@@ -7,9 +7,9 @@ char* build_fs_shader(
     ecs_strbuf_t fs_shader = ECS_STRBUF_INIT;
 
     ecs_strbuf_appendstr(&fs_shader, 
-    "#version 330\n"
-    "out vec4 frag_color;\n"
-    "in vec2 uv;\n");
+        SOKOL_SHADER_HEADER
+        "out vec4 frag_color;\n"
+        "in vec2 uv;\n");
 
     sokol_fx_pass_input_t *input;
     int i = 0;

@@ -5,7 +5,7 @@ typedef struct shadow_vs_uniforms_t {
 } shadow_vs_uniforms_t;
 
 static const char *shd_v = 
-    "#version 330\n"
+    SOKOL_SHADER_HEADER
     "uniform mat4 u_mat_vp;\n"
     "layout(location=0) in vec4 v_position;\n"
     "layout(location=1) in mat4 i_mat_m;\n"
@@ -16,7 +16,7 @@ static const char *shd_v =
     "}\n";
 
 static const char *shd_f =
-    "#version 330\n"
+    SOKOL_SHADER_HEADER
     "in vec2 proj_zw;\n"
     "out vec4 frag_color;\n"
 
@@ -35,6 +35,8 @@ static const char *shd_f =
 sokol_offscreen_pass_t sokol_init_shadow_pass(
     int size)
 {
+    ecs_trace("sokol: initialize shadow pipeline");
+
     sokol_offscreen_pass_t result = {0};
 
     result.pass_action  = (sg_pass_action) {
