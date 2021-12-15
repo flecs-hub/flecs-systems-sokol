@@ -7,7 +7,6 @@
 #endif
 
 #define SOKOL_NO_ENTRY
-#include "sokol/sokol.h"
 #include "private_api.h"
 
 /* Application wrapper */
