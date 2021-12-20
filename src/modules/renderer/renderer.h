@@ -14,8 +14,7 @@ typedef struct SokolRenderer {
     sokol_offscreen_pass_t scene_pass;
     sokol_screen_pass_t screen_pass;
 
-    SokolEffect fx_bloom;
-    SokolEffect fx_fog;
+    sokol_fx_resources_t *fx;
 
     ecs_entity_t canvas;
 } SokolRenderer;

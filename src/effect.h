@@ -1,57 +1,102 @@
 #ifndef SOKOL_EFFECT_H
 #define SOKOL_EFFECT_H
 
-typedef struct sokol_fx_pass_input_t {
-    const char *name;
-    int id;
-} sokol_fx_pass_input_t;
+typedef struct sokol_screen_pass_t sokol_screen_pass_t;
 
-typedef struct sokol_fx_pass_param_t {
+/* Fx descriptors */
+
+typedef struct sokol_fx_input_t {
+    int8_t pass;
+    int8_t index;
+} sokol_fx_input_t;
+
+typedef struct sokol_fx_output_desc_t {
+    int16_t width;
+    int16_t height;
+} sokol_fx_output_desc_t;
+
+typedef struct sokol_fx_step_t {
     const char *name;
-    float value;
-} sokol_fx_pass_param_t;
+    int8_t output;
+    int8_t loop_count;
+    sokol_fx_input_t inputs[SOKOL_MAX_FX_INPUTS];
+    float params[SOKOL_MAX_FX_PARAMS];
+} sokol_fx_step_t; 
 
 typedef struct sokol_fx_pass_desc_t {
-    const char *shader;
+    const char *name;
     const char *shader_header;
-    int32_t width;
-    int32_t height;
-    sokol_fx_pass_input_t inputs[SOKOL_MAX_EFFECT_INPUTS];
-    sokol_fx_pass_param_t params[SOKOL_MAX_EFFECT_PARAMS];
+    const char *shader;
+    sokol_fx_output_desc_t outputs[SOKOL_MAX_FX_OUTPUTS];
+    int8_t sample_count;
+    sg_pixel_format color_format;
+    const char *inputs[SOKOL_MAX_FX_INPUTS];
+    const char *params[SOKOL_MAX_FX_INPUTS];
+    sokol_fx_step_t steps[SOKOL_MAX_FX_STEPS];
 } sokol_fx_pass_desc_t;
 
+
+/* Fx implementation */
+
+typedef struct sokol_fx_output_t {
+    int16_t width;
+    int16_t height;    
+    sg_image out[2];
+    sg_pass pass[2];
+    int8_t step_count;
+    int8_t toggle;
+} sokol_fx_output_t;
+
 typedef struct sokol_fx_pass_t {
-    sokol_offscreen_pass_t pass;
-    int32_t input_count;
-    int32_t param_count;
-    int32_t inputs[SOKOL_MAX_EFFECT_INPUTS];
-    float params[SOKOL_MAX_EFFECT_PARAMS];
-    int32_t width;
-    int32_t height;
+    const char *name;
+    int8_t loop_count;
+
+    int8_t param_count;
+    int8_t input_count;
+    
+    int8_t sample_count;
+    int8_t output_count;
+    sokol_fx_output_t outputs[SOKOL_MAX_FX_OUTPUTS];
+
+    int8_t step_count;
+    sokol_fx_step_t steps[SOKOL_MAX_FX_STEPS];
+
+    sg_pipeline pip;
 } sokol_fx_pass_t;
 
-typedef struct SokolEffect {
-    sokol_fx_pass_t pass[SOKOL_MAX_EFFECT_PASS];
-    int32_t input_count;
-    int32_t pass_count;
-} SokolEffect;
+typedef struct SokolFx {
+    const char *name;
+    sokol_fx_pass_t pass[SOKOL_MAX_FX_PASS];
+    int8_t input_count;
+    int8_t pass_count;
+} SokolFx;
 
-SokolEffect sokol_effect_init(
-    int32_t input_count);
+typedef struct sokol_fx_resources_t {
+    SokolFx hdr;
+} sokol_fx_resources_t;
+
+/* Map input index to effect input */
+#define SOKOL_FX_INPUT(index) (index)
+
+/* Map input index to local pass target */ 
+#define SOKOL_FX_PASS(index) (index + SOKOL_MAX_FX_INPUTS)
+
+#define SOKOL_FX_IS_PASS(index) (index >= SOKOL_MAX_FX_INPUTS)
 
 void sokol_effect_set_param(
-    SokolEffect *effect,
+    SokolFx *effect,
     const char *param,
     float value);
 
-sg_image sokol_effect_run(
-    sokol_resources_t *res,
-    SokolEffect *effect,
+sg_image sokol_fx_run(
+    SokolFx *effect,
     int32_t input_count,
-    sg_image inputs[]);
+    sg_image inputs[],
+    sokol_render_state_t *state,
+    sokol_screen_pass_t *screen_pass);
 
-int sokol_effect_add_pass(
-    SokolEffect *fx, 
-    sokol_fx_pass_desc_t pass);
+int sokol_fx_add_pass(
+    SokolFx *fx, 
+    sokol_fx_pass_desc_t *pass);
 
 #endif

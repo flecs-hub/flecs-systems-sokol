@@ -119,6 +119,11 @@ void populate_buffer(
         if (!count) {
             instances->instance_count = 0;
         } else {
+            if (count == 1) {
+                /* Instanced pipelines can't work with single instance */
+                count ++;
+            }
+
             /* Fetch materials buffer */
             const SokolMaterials *render_materials = ecs_get(
                 world, SokolRendererInst, SokolMaterials);
@@ -136,9 +141,12 @@ void populate_buffer(
             int32_t instance_max = instances->instance_max;
 
             if (instance_count < count) {
-                colors = ecs_os_realloc(colors, colors_size);
-                transforms = ecs_os_realloc(transforms, transforms_size);
-                materials = ecs_os_realloc(materials, materials_size);
+                ecs_os_free(colors);
+                ecs_os_free(transforms);
+                ecs_os_free(materials);
+                colors = ecs_os_calloc(colors_size);
+                transforms = ecs_os_calloc(transforms_size);
+                materials = ecs_os_calloc(materials_size);
             }
 
             /* Copy data into application buffers */

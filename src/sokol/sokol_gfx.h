@@ -4769,6 +4769,7 @@ _SOKOL_PRIVATE void _sg_dummy_update_image(_sg_image_t* img, const sg_image_data
     _SG_XMACRO(glFrontFace,                       void, (GLenum mode)) \
     _SG_XMACRO(glCullFace,                        void, (GLenum mode))
 
+
 // generate GL function pointer typedefs
 #define _SG_XMACRO(name, ret, args) typedef ret (GL_APIENTRY* PFN_ ## name) args;
 _SG_GL_FUNCS
@@ -5928,6 +5929,7 @@ _SOKOL_PRIVATE void _sg_gl_cache_bind_texture(int slot_index, GLenum target, GLu
     if (slot_index >= _sg.gl.max_combined_texture_image_units) {
         return;
     }
+
     _sg_gl_texture_bind_slot* slot = &_sg.gl.cache.textures[slot_index];
     if ((slot->target != target) || (slot->texture != texture)) {
         _sg_gl_cache_active_texture((GLenum)(GL_TEXTURE0 + slot_index));
@@ -6384,6 +6386,10 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_
                     }
                 }
                 _sg_gl_cache_restore_texture_binding(0);
+            }
+
+            if (img->cmn.render_target && (img->cmn.num_mipmaps > 1)) {
+                glGenerateMipmap(GL_TEXTURE_2D);   
             }
         }
     }
@@ -7249,6 +7255,9 @@ _SOKOL_PRIVATE void _sg_gl_apply_bindings(
                 SOKOL_ASSERT(img && img->gl.target);
                 SOKOL_ASSERT((gl_shd_img->gl_tex_slot != -1) && gl_tex);
                 _sg_gl_cache_bind_texture(gl_shd_img->gl_tex_slot, img->gl.target, gl_tex);
+                if (img->cmn.render_target && (img->cmn.num_mipmaps > 1)) {
+                    glGenerateMipmap(GL_TEXTURE_2D);   
+                }
             }
         }
     }

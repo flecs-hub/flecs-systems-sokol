@@ -33,10 +33,6 @@ sg_pipeline init_screen_pipeline() {
                 [0] = { .buffer_index=0, .format=SG_VERTEXFORMAT_FLOAT3 },
                 [1] = { .buffer_index=0, .format=SG_VERTEXFORMAT_FLOAT2 }
             }
-        },
-        .depth = {
-            .compare = SG_COMPAREFUNC_LESS_EQUAL,
-            .write_enabled = false
         }
     });
 }
@@ -44,7 +40,7 @@ sg_pipeline init_screen_pipeline() {
 sokol_screen_pass_t sokol_init_screen_pass(void) {
     return (sokol_screen_pass_t) {
         .pip = init_screen_pipeline(),
-        .pass_action = sokol_clear_action((ecs_rgb_t){0, 0, 0}, true, true)
+        .pass_action = sokol_clear_action((ecs_rgb_t){0, 0, 0}, false, false)
     };
 }
 
@@ -65,6 +61,7 @@ void sokol_run_screen_pass(
     };
 
     sg_apply_bindings(&bind);
+
     sg_draw(0, 6, 1);
-    sg_end_pass();    
+    sg_end_pass();
 }

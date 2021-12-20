@@ -24,11 +24,17 @@ void sokol_frame_action(sokol_app_ctx_t *ctx) {
 static
 sokol_app_ctx_t sokol_app_ctx;
 
+void DeltaTime(ecs_iter_t *it) {
+    printf("delta time: %f\n", it->delta_time);
+}
+
 static
 int sokol_run_action(
     ecs_world_t *world,
     ecs_app_desc_t *desc)
 {
+    // ECS_SYSTEM(world, DeltaTime, EcsOnUpdate, 0);
+    
     sokol_app_ctx = (sokol_app_ctx_t){
         .world = world,
         .desc = desc
@@ -52,21 +58,20 @@ int sokol_run_action(
     /* If there is more than one canvas, ignore */
     while (ecs_term_next(&it)) { }
 
-    /* Enable time measurements for getting delta_time */
-    ecs_measure_frame_time(world, true);
-
     ecs_trace("sokol: starting app '%s'", title);
 
     /* Run app */
     sapp_run(&(sapp_desc) {
         .frame_userdata_cb = (void(*)(void*))sokol_frame_action,
         .user_data = &sokol_app_ctx,
-        .sample_count = 2,
-        .gl_force_gles2 = false,
         .window_title = title,
         .width = width,
         .height = height,
-        .high_dpi = true
+        .sample_count = 2,
+#ifndef __EMSCRIPTEN__        
+        .high_dpi = true,
+#endif
+        .gl_force_gles2 = false
     });
 
     return 0;

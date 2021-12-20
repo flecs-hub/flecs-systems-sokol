@@ -4,15 +4,26 @@
 
 sg_image sokol_target_rgba8(
     int32_t width, 
-    int32_t height);
+    int32_t height,
+    int32_t sample_count);
 
 sg_image sokol_target_rgba16f(
     int32_t width, 
-    int32_t height);
+    int32_t height,
+    int32_t sample_count,
+    int32_t num_mipmaps);
 
 sg_image sokol_target_depth(
     int32_t width, 
-    int32_t height);
+    int32_t height,
+    int32_t sample_count);
+
+sg_image sokol_target(
+    int32_t width, 
+    int32_t height,
+    int32_t sample_count,
+    int32_t num_mipmaps,
+    sg_pixel_format format);
 
 sg_buffer sokol_buffer_quad(void);
 

@@ -4,10 +4,12 @@
 #include <flecs_systems_sokol.h>
 #include "sokol/sokol.h"
 
-#define SOKOL_MAX_EFFECT_INPUTS (8)
-#define SOKOL_MAX_EFFECT_PASS (8)
-#define SOKOL_MAX_EFFECT_PARAMS (32)
-#define SOKOL_SHADOW_MAP_SIZE (4096)
+#define SOKOL_MAX_FX_STEPS (8)
+#define SOKOL_MAX_FX_INPUTS (8)
+#define SOKOL_MAX_FX_OUTPUTS (8)
+#define SOKOL_MAX_FX_PASS (8)
+#define SOKOL_MAX_FX_PARAMS (32)
+#define SOKOL_SHADOW_MAP_SIZE (1024)
 
 /* Immutable resources used by different components to avoid duplication */
 typedef struct sokol_resources_t {
@@ -49,6 +51,7 @@ typedef struct sokol_render_state_t {
     float delta_time;
     float world_time;
 
+    sokol_resources_t *resources;
     sokol_global_uniforms_t uniforms;
     sg_image shadow_map;
 } sokol_render_state_t;
@@ -63,22 +66,12 @@ typedef struct sokol_offscreen_pass_t {
 
 #include "resources.h"
 #include "effect.h"
+#include "fx/fx.h"
 
-typedef struct sokol_screen_pass_t {
+struct sokol_screen_pass_t {
     sg_pass_action pass_action;
     sg_pipeline pip;
-} sokol_screen_pass_t;
-
-
-/* Internal functions */
-
-SokolEffect sokol_init_bloom(
-    int width, 
-    int height);
-
-SokolEffect sokol_init_fog(
-    int width, 
-    int height);
+};
 
 /* Shadow pass */
 sokol_offscreen_pass_t sokol_init_shadow_pass(
@@ -91,7 +84,9 @@ void sokol_run_shadow_pass(
 /* Depth pass */
 sokol_offscreen_pass_t sokol_init_depth_pass(
     int32_t w, 
-    int32_t h);
+    int32_t h,
+    sg_image depth_target,
+    int32_t sample_count);
 
 void sokol_run_depth_pass(
     sokol_offscreen_pass_t *pass,
@@ -100,9 +95,10 @@ void sokol_run_depth_pass(
 /* Scene pass */
 sokol_offscreen_pass_t sokol_init_scene_pass(
     ecs_rgb_t background_color,
-    sg_image depth_target,
     int32_t w, 
-    int32_t h);
+    int32_t h,
+    int32_t sample_count,
+    sokol_offscreen_pass_t *depth_pass_out);
 
 /* Screen pass */
 sokol_screen_pass_t sokol_init_screen_pass(void);

@@ -11,38 +11,38 @@ typedef struct depth_fs_uniforms_t {
 const char* sokol_vs_depth(void) 
 {
     return  SOKOL_SHADER_HEADER
-            "uniform mat4 u_mat_vp;\n"
-            "uniform vec3 u_eye_pos;\n"
-            "layout(location=0) in vec4 v_position;\n"
-            "layout(location=1) in mat4 i_mat_m;\n"
-            "out vec3 position;\n"
-            "void main() {\n"
-            "  gl_Position = u_mat_vp * i_mat_m * v_position;\n"
-            "  position = gl_Position.xyz;\n"
-            "}\n";
+        "uniform mat4 u_mat_vp;\n"
+        "uniform vec3 u_eye_pos;\n"
+        "layout(location=0) in vec4 v_position;\n"
+        "layout(location=1) in mat4 i_mat_m;\n"
+        "out vec3 position;\n"
+        "void main() {\n"
+        "  gl_Position = u_mat_vp * i_mat_m * v_position;\n"
+        "  position = gl_Position.xyz;\n"
+        "}\n";
 }
 
 const char* sokol_fs_depth(void) 
 {
     return  SOKOL_SHADER_HEADER
-            "uniform vec3 u_eye_pos;\n"
-            "in vec3 position;\n"
-            "out vec4 frag_color;\n"
+        "uniform vec3 u_eye_pos;\n"
+        "in vec3 position;\n"
+        "out vec4 frag_color;\n"
 
-            "vec4 encodeDepth(float v) {\n"
-            "    vec4 enc = vec4(1.0, 255.0, 65025.0, 160581375.0) * v;\n"
-            "    enc = fract(enc);\n"
-            "    enc -= enc.yzww * vec4(1.0/255.0,1.0/255.0,1.0/255.0,0.0);\n"
-            "    return enc;\n"
-            "}\n"
+        "vec4 encodeDepth(float v) {\n"
+        "    vec4 enc = vec4(1.0, 255.0, 65025.0, 160581375.0) * v;\n"
+        "    enc = fract(enc);\n"
+        "    enc -= enc.yzww * vec4(1.0/255.0,1.0/255.0,1.0/255.0,0.0);\n"
+        "    return enc;\n"
+        "}\n"
 
-            "void main() {\n"
-            "  float depth = length(position);\n"
-            "  frag_color = encodeDepth(depth);\n"
-            "}\n";
+        "void main() {\n"
+        "  float depth = length(position);\n"
+        "  frag_color = encodeDepth(depth);\n"
+        "}\n";
 }
 
-sg_pipeline init_depth_pipeline(void) {
+sg_pipeline init_depth_pipeline(int32_t sample_count) {
     ecs_trace("sokol: initialize depth pipieline");
 
     /* create an instancing shader */
@@ -94,28 +94,32 @@ sg_pipeline init_depth_pipeline(void) {
         .colors = {{
             .pixel_format = SG_PIXELFORMAT_RGBA16F
         }},
-        .cull_mode = SG_CULLMODE_BACK
+        .cull_mode = SG_CULLMODE_BACK,
+        .sample_count = sample_count
     });
 }
 
 sokol_offscreen_pass_t sokol_init_depth_pass(
     int32_t w, 
-    int32_t h) 
+    int32_t h,
+    sg_image depth_target,
+    int32_t sample_count) 
 {
-    sg_image color_target = sokol_target_rgba16f(w, h);
-    sg_image depth_target = sokol_target_depth(w, h);
+    ecs_trace("sokol: initialize depth pass");
+
+    sg_image color_target = sokol_target_rgba16f(w, h, sample_count, 1);
     ecs_rgb_t background_color = {0};
 
     return (sokol_offscreen_pass_t){
-        .pass_action = sokol_clear_action(background_color, true, true),
+        .pass_action = sokol_clear_action(background_color, false, true),
         .pass = sg_make_pass(&(sg_pass_desc){
             .color_attachments[0].image = color_target,
             .depth_stencil_attachment.image = depth_target
         }),
-        .pip = init_depth_pipeline(),
+        .pip = init_depth_pipeline(sample_count),
         .color_target = color_target,
-        .depth_target = depth_target,
-    };   
+        .depth_target = depth_target
+    };
 }
 
 static
@@ -136,6 +140,7 @@ void depth_draw_instances(
     };
 
     sg_apply_bindings(&bind);
+
     sg_draw(0, geometry->index_count, instances->instance_count);
 }
 
@@ -167,5 +172,6 @@ void sokol_run_depth_pass(
             depth_draw_instances(&geometry[b], &geometry[b].emissive);
         }
     }
+
     sg_end_pass();
 }

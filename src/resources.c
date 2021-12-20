@@ -88,49 +88,69 @@ void compute_flat_normals(
     }
 }
 
-sg_image sokol_target_rgba8(
+sg_image sokol_target(
     int32_t width, 
-    int32_t height) 
+    int32_t height,
+    int32_t sample_count,
+    int32_t num_mipmaps,
+    sg_pixel_format format)
 {
-    sg_image_desc img_desc = {
-        .render_target = true,
-        .width = width,
-        .height = height,
-        .wrap_u = SG_WRAP_CLAMP_TO_EDGE,
-        .wrap_v = SG_WRAP_CLAMP_TO_EDGE,
-        .pixel_format = SG_PIXELFORMAT_RGBA8,
-        .min_filter = SG_FILTER_LINEAR,
-        .mag_filter = SG_FILTER_LINEAR,
-        .sample_count = 1,
-        .label = "color-image"
-    };
+    sg_image_desc img_desc;
+    
+    if (num_mipmaps > 1) {
+        img_desc = (sg_image_desc){
+            .render_target = true,
+            .width = width,
+            .height = height,
+            .wrap_u = SG_WRAP_CLAMP_TO_EDGE,
+            .wrap_v = SG_WRAP_CLAMP_TO_EDGE,
+            .pixel_format = format,
+            .min_filter = SG_FILTER_LINEAR_MIPMAP_LINEAR,
+            .mag_filter = SG_FILTER_LINEAR,
+            .sample_count = sample_count,
+            .num_mipmaps = num_mipmaps,
+            .label = "render target"
+        };
+    } else {
+        img_desc = (sg_image_desc){
+            .render_target = true,
+            .width = width,
+            .height = height,
+            .wrap_u = SG_WRAP_CLAMP_TO_EDGE,
+            .wrap_v = SG_WRAP_CLAMP_TO_EDGE,
+            .pixel_format = format,
+            .min_filter = SG_FILTER_LINEAR,
+            .mag_filter = SG_FILTER_LINEAR,
+            .sample_count = sample_count,
+            .num_mipmaps = num_mipmaps,
+            .label = "render target"
+        };
+    }
 
     return sg_make_image(&img_desc);
+}
+
+sg_image sokol_target_rgba8(
+    int32_t width, 
+    int32_t height,
+    int32_t sample_count)
+{
+    return sokol_target(width, height, sample_count, 1, SG_PIXELFORMAT_RGBA8);
 }
 
 sg_image sokol_target_rgba16f(
     int32_t width, 
-    int32_t height) 
+    int32_t height,
+    int32_t sample_count,
+    int32_t num_mipmaps) 
 {
-    sg_image_desc img_desc = {
-        .render_target = true,
-        .width = width,
-        .height = height,
-        .wrap_u = SG_WRAP_CLAMP_TO_EDGE,
-        .wrap_v = SG_WRAP_CLAMP_TO_EDGE,
-        .pixel_format = SG_PIXELFORMAT_RGBA16F,
-        .min_filter = SG_FILTER_LINEAR,
-        .mag_filter = SG_FILTER_LINEAR,
-        .sample_count = 1,
-        .label = "color-image"
-    };
-
-    return sg_make_image(&img_desc);
+    return sokol_target(width, height, sample_count, num_mipmaps, SG_PIXELFORMAT_RGBA16F);
 }
 
 sg_image sokol_target_depth(
     int32_t width, 
-    int32_t height) 
+    int32_t height,
+    int32_t sample_count) 
 {
     sg_image_desc img_desc = {
         .render_target = true,
@@ -139,7 +159,7 @@ sg_image sokol_target_depth(
         .pixel_format = SG_PIXELFORMAT_DEPTH,
         .min_filter = SG_FILTER_LINEAR,
         .mag_filter = SG_FILTER_LINEAR,
-        .sample_count = 1,
+        .sample_count = sample_count,
         .label = "depth-image"
     };
 
@@ -242,6 +262,7 @@ sg_pass_action sokol_clear_action(
         action.depth.value = 1.0;
     } else {
         action.depth.action = SG_ACTION_DONTCARE;
+        action.stencil.action = SG_ACTION_DONTCARE;
     }
 
     return action;
@@ -258,4 +279,3 @@ const char* sokol_vs_passthrough(void)
             "  uv = v_uv;\n"
             "}\n";
 }
-

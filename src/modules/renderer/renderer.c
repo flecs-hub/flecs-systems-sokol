@@ -74,7 +74,12 @@ void init_global_uniforms(
             cam.up[1] = 1.0;
         }
 
-        glm_perspective(cam.fov, state->aspect, cam.near, cam.far, mat_p);
+        if (!cam.ortho) {
+            glm_perspective(cam.fov, state->aspect, cam.near, cam.far, mat_p);
+        } else {
+            glm_ortho_default(state->aspect, mat_p);
+        }
+
         glm_lookat(cam.position, cam.lookat, cam.up, mat_v);
         glm_vec3_copy(cam.position, state->uniforms.eye_pos);
     } else {
@@ -101,7 +106,6 @@ void init_global_uniforms(
     state->uniforms.shadow_map_size = SOKOL_SHADOW_MAP_SIZE;
 }
 
-
 /* Render */
 static
 void SokolRender(ecs_iter_t *it) {
@@ -109,6 +113,7 @@ void SokolRender(ecs_iter_t *it) {
     SokolRenderer *r = ecs_term(it, SokolRenderer, 1);
     EcsQuery *q_buffers = ecs_term(it, EcsQuery, 2);
     sokol_render_state_t state = {0};
+    sokol_fx_resources_t *fx = r->fx;
 
     if (it->count > 1) {
         ecs_err("sokol: multiple canvas instances unsupported");
@@ -122,6 +127,7 @@ void SokolRender(ecs_iter_t *it) {
     state.world = world;
     state.q_scene = q_buffers->query;
     state.shadow_map = r->shadow_pass.color_target;
+    state.resources = &r->resources;
 
     /* Load active camera & light data from canvas */
     const EcsCanvas *canvas = ecs_get(world, r->canvas, EcsCanvas);
@@ -151,19 +157,13 @@ void SokolRender(ecs_iter_t *it) {
     /* Depth prepass for more efficient drawing */
     sokol_run_depth_pass(&r->depth_pass, &state);
 
-    /* Draw geometry */
+    /* Render scene */
     sokol_run_scene_pass(&r->scene_pass, &state);
+    sg_image hdr = r->scene_pass.color_target;
 
-    sg_image target = r->scene_pass.color_target;
-
-    /* Add post processing effects */
-    target = sokol_effect_run(
-        &r->resources, &r->fx_bloom, 1, (sg_image[]){
-            target
-        });
-
-    /* Present last pass to screen */
-    sokol_run_screen_pass(&r->screen_pass, &r->resources, &state, target);
+    // HDR
+    sokol_fx_run(&fx->hdr, 1, (sg_image[]){ hdr },
+        &state, &r->screen_pass);
 }
 
 static
@@ -187,21 +187,27 @@ void SokolInitRenderer(ecs_iter_t *it) {
     int w = sapp_width();
     int h = sapp_height();
 
-    sg_setup(&(sg_desc) {0});
+    sg_setup(&(sg_desc) {
+        .context.depth_format = SG_PIXELFORMAT_NONE
+    });
+
     assert(sg_isvalid());
     ecs_trace("sokol: library initialized");
 
     sokol_resources_t resources = init_resources();
-    sokol_offscreen_pass_t depth_pass = sokol_init_depth_pass(w, h);
+
+    sokol_offscreen_pass_t depth_pass;
+    sokol_offscreen_pass_t scene_pass = sokol_init_scene_pass(
+        canvas->background_color, w, h, 2, &depth_pass);
 
     ecs_set(world, SokolRendererInst, SokolRenderer, {
         .canvas = it->entities[0],
         .resources = resources,
         .depth_pass = depth_pass,
         .shadow_pass = sokol_init_shadow_pass(SOKOL_SHADOW_MAP_SIZE),
-        .scene_pass = sokol_init_scene_pass(canvas->background_color, depth_pass.depth_target, w, h),
+        .scene_pass = scene_pass,
         .screen_pass = sokol_init_screen_pass(),
-        .fx_bloom = sokol_init_bloom(w * 2, h * 2)
+        .fx = sokol_init_fx(w, h)
     });
 
     ecs_trace("sokol: canvas initialized");

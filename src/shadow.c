@@ -7,11 +7,11 @@ typedef struct shadow_vs_uniforms_t {
 static const char *shd_v = 
     SOKOL_SHADER_HEADER
     "uniform mat4 u_mat_vp;\n"
-    "layout(location=0) in vec4 v_position;\n"
+    "layout(location=0) in vec3 v_position;\n"
     "layout(location=1) in mat4 i_mat_m;\n"
     "out vec2 proj_zw;\n"
     "void main() {\n"
-    "  gl_Position = u_mat_vp * i_mat_m * v_position;\n"
+    "  gl_Position = u_mat_vp * i_mat_m * vec4(v_position, 1.0);\n"
     "  proj_zw = gl_Position.zw;\n"
     "}\n";
 
@@ -46,8 +46,8 @@ sokol_offscreen_pass_t sokol_init_shadow_pass(
         }
     };
 
-    result.depth_target = sokol_target_depth(size, size);
-    result.color_target = sokol_target_rgba8(size, size);
+    result.depth_target = sokol_target_depth(size, size, 1);
+    result.color_target = sokol_target_rgba8(size, size, 1);
 
     result.pass = sg_make_pass(&(sg_pass_desc){
         .color_attachments[0].image = result.color_target,
