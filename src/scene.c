@@ -203,7 +203,7 @@ sokol_offscreen_pass_t sokol_init_scene_pass(
     int32_t sample_count,
     sokol_offscreen_pass_t *depth_pass_out) 
 {
-    sg_image color_target = sokol_target_rgba16f( w, h, sample_count, 4);
+    sg_image color_target = sokol_target_rgba16f( w, h, sample_count, 1);
     sg_image depth_target = sokol_target_depth(w, h, sample_count);
 
     ecs_trace("sokol: initialize scene pass");

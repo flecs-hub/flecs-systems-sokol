@@ -29,6 +29,7 @@ typedef struct sokol_fx_pass_desc_t {
     const char *shader;
     sokol_fx_output_desc_t outputs[SOKOL_MAX_FX_OUTPUTS];
     int8_t sample_count;
+    int8_t mipmap_count;
     sg_pixel_format color_format;
     const char *inputs[SOKOL_MAX_FX_INPUTS];
     const char *params[SOKOL_MAX_FX_INPUTS];
@@ -55,6 +56,7 @@ typedef struct sokol_fx_pass_t {
     int8_t input_count;
     
     int8_t sample_count;
+    int8_t mipmap_count;
     int8_t output_count;
     sokol_fx_output_t outputs[SOKOL_MAX_FX_OUTPUTS];
 
@@ -73,6 +75,7 @@ typedef struct SokolFx {
 
 typedef struct sokol_fx_resources_t {
     SokolFx hdr;
+    SokolFx fog;
 } sokol_fx_resources_t;
 
 /* Map input index to effect input */

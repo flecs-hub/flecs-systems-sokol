@@ -66,8 +66,8 @@ void init_global_uniforms(
         }
 
         if (!cam.near && !cam.far) {
-            cam.near = 0.1;
-            cam.far = 1000;
+            cam.near = 1.5;
+            cam.far = 2000;
         }
 
         if (!cam.up[0] && !cam.up[1] && !cam.up[2]) {
@@ -161,8 +161,13 @@ void SokolRender(ecs_iter_t *it) {
     sokol_run_scene_pass(&r->scene_pass, &state);
     sg_image hdr = r->scene_pass.color_target;
 
-    // HDR
-    sokol_fx_run(&fx->hdr, 1, (sg_image[]){ hdr },
+    /* Fog */
+    sg_image fog = sokol_fx_run(&fx->fog, 2, (sg_image[]){ 
+        hdr, r->depth_pass.color_target },
+            &state, 0);
+
+    /* HDR */
+    sokol_fx_run(&fx->hdr, 1, (sg_image[]){ fog },
         &state, &r->screen_pass);
 }
 

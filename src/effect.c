@@ -58,6 +58,7 @@ int sokol_fx_add_pass(
 
     sokol_fx_pass_t *pass = &fx->pass[fx->pass_count ++];
     pass->name = pass_desc->name;
+    pass->mipmap_count = pass_desc->mipmap_count;
     pass->sample_count = pass_desc->sample_count;
     pass->loop_count = 1;
     sg_pixel_format color_format = pass_desc->color_format;
@@ -195,7 +196,7 @@ int sokol_fx_add_pass(
         }
 
         pass->outputs[i].out[0] = sokol_target(output->width, 
-            output->height, pass->sample_count, 1, color_format);
+            output->height, pass->sample_count, pass->mipmap_count, color_format);
         pass->outputs[i].pass[0] = sg_make_pass(&(sg_pass_desc){
             .color_attachments[0].image = pass->outputs[i].out[0]
         });
@@ -214,7 +215,7 @@ int sokol_fx_add_pass(
         /* If multiple steps use output, create intermediate buffer */
         if (step_count > 1) {
             pass->outputs[i].out[1] = sokol_target(output->width, 
-                output->height, pass->sample_count, 1, color_format);
+                output->height, pass->sample_count, pass->mipmap_count, color_format);
             pass->outputs[i].pass[1] = sg_make_pass(&(sg_pass_desc){
                 .color_attachments[0].image = pass->outputs[i].out[1]
             });

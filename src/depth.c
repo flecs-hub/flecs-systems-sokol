@@ -29,16 +29,9 @@ const char* sokol_fs_depth(void)
         "in vec3 position;\n"
         "out vec4 frag_color;\n"
 
-        "vec4 encodeDepth(float v) {\n"
-        "    vec4 enc = vec4(1.0, 255.0, 65025.0, 160581375.0) * v;\n"
-        "    enc = fract(enc);\n"
-        "    enc -= enc.yzww * vec4(1.0/255.0,1.0/255.0,1.0/255.0,0.0);\n"
-        "    return enc;\n"
-        "}\n"
-
         "void main() {\n"
         "  float depth = length(position);\n"
-        "  frag_color = encodeDepth(depth);\n"
+        "  frag_color = vec4(depth);\n"
         "}\n";
 }
 
@@ -111,7 +104,7 @@ sokol_offscreen_pass_t sokol_init_depth_pass(
     ecs_rgb_t background_color = {0};
 
     return (sokol_offscreen_pass_t){
-        .pass_action = sokol_clear_action(background_color, false, true),
+        .pass_action = sokol_clear_action(background_color, true, true),
         .pass = sg_make_pass(&(sg_pass_desc){
             .color_attachments[0].image = color_target,
             .depth_stencil_attachment.image = depth_target

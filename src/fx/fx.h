@@ -17,10 +17,10 @@
     "    return dot(rgba, vec4(1.0, 1.0 / 255.0, 1.0 / 65025.0, 1.0 / 160581375.0));\n" \
     "}\n"
 
-SokolFx sokol_init_luminance(
+SokolFx sokol_init_hdr(
     int width, int height);
 
-SokolFx sokol_init_hdr(
+SokolFx sokol_init_fog(
     int width, int height);
 
 sokol_fx_resources_t* sokol_init_fx(
