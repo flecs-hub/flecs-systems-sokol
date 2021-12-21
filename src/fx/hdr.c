@@ -46,7 +46,7 @@ const char *shd_hdr =
     "vec3 c = texture(hdr, uv).rgb;\n"
     "vec3 b = texture(bloom, uv).rgb;\n"
     "float b_clip = dot(vec3(0.333), b);\n"
-    "b = b + pow(b_clip, 2.0);\n"
+    "b = b + pow(b_clip, 3.0);\n"
     "c = c + b;\n"
     "c = pow(c, vec3(1.0 / gamma));\n"
     "frag_color = vec4(c, 1.0);\n";
@@ -72,12 +72,12 @@ SokolFx sokol_init_hdr(
         .steps = {
             [0] = {
                 .name = "halo",
-                .params = { 3.0, 1.0 },
+                .params = { 4.0, 1.0 },
                 .inputs = { {FX_INPUT_HDR} }
             },
             [1] = {
                 .name = "glow",
-                .params = { 1.2 },
+                .params = { 3.0 },
                 .inputs = { {FX_INPUT_HDR} },
                 .output = 1
             }
