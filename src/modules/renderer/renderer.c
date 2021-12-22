@@ -51,44 +51,51 @@ static
 void init_global_uniforms(
     sokol_render_state_t *state)
 {
-    vec3 eye = {0, 0, -2.0};
-    vec3 center = {0.0, 0.0, 0.0};
-    vec3 up = {0.0, 1.0, 0.0};
-
     mat4 mat_p;
     mat4 mat_v;
 
-    /* Compute perspective & lookat matrix */
+    /* Default camera parameters */
+    state->uniforms.near = SOKOL_DEFAULT_DEPTH_NEAR;
+    state->uniforms.far = SOKOL_DEFAULT_DEPTH_FAR;
+    state->uniforms.fov = 30;
+    state->uniforms.ortho = false;
+
+    /* If camera is set, get values */
     if (state->camera) {
         EcsCamera cam = *state->camera;
-        if (!cam.fov) {
-            cam.fov = 30;
+
+        if (cam.fov) {
+            state->uniforms.fov = cam.fov;
         }
 
-        if (!cam.near && !cam.far) {
-            cam.near = 1.5;
-            cam.far = 2000;
+        if (cam.near || cam.far) {
+            state->uniforms.near = cam.near;
+            state->uniforms.far = cam.far;
         }
 
-        if (!cam.up[0] && !cam.up[1] && !cam.up[2]) {
-            cam.up[1] = 1.0;
+        if (cam.up[0] || !cam.up[1] || !cam.up[2]) {
+            glm_vec3_copy(cam.up, state->uniforms.eye_up);
         }
 
-        if (!cam.ortho) {
-            glm_perspective(cam.fov, state->aspect, cam.near, cam.far, mat_p);
-        } else {
-            glm_ortho_default(state->aspect, mat_p);
-        }
+        state->uniforms.ortho = cam.ortho;
 
-        glm_lookat(cam.position, cam.lookat, cam.up, mat_v);
         glm_vec3_copy(cam.position, state->uniforms.eye_pos);
-    } else {
-        glm_perspective(30, state->aspect, 0.5, 100.0, mat_p);
-        glm_lookat(eye, center, up, mat_v);
-        glm_vec3_copy(eye, state->uniforms.eye_pos);
+        glm_vec3_copy(cam.lookat, state->uniforms.eye_lookat);
     }
 
-    /* Compute view/projection matrix */
+    /* Compute pv matrix */
+    if (state->uniforms.ortho) {
+        glm_ortho_default(state->aspect, mat_p);
+    } else {
+        glm_perspective(
+            state->uniforms.fov, 
+            state->aspect, 
+            state->uniforms.near, 
+            state->uniforms.far, 
+            mat_p);
+    }
+
+    glm_lookat(state->uniforms.eye_pos, state->uniforms.eye_lookat, state->uniforms.eye_up, mat_v);
     glm_mat4_mul(mat_p, mat_v, state->uniforms.mat_vp);
 
     /* Get light parameters */

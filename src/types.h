@@ -10,6 +10,8 @@
 #define SOKOL_MAX_FX_PASS (8)
 #define SOKOL_MAX_FX_PARAMS (32)
 #define SOKOL_SHADOW_MAP_SIZE (1024)
+#define SOKOL_DEFAULT_DEPTH_NEAR (1.5)
+#define SOKOL_DEFAULT_DEPTH_FAR (2000)
 
 /* Immutable resources used by different components to avoid duplication */
 typedef struct sokol_resources_t {
@@ -32,7 +34,16 @@ typedef struct sokol_global_uniforms_t {
     vec3 light_ambient;
     vec3 light_direction;
     vec3 light_color;
+    
     vec3 eye_pos;
+    vec3 eye_up;
+    vec3 eye_lookat;
+
+    float near;
+    float far;
+    float fov;
+    bool ortho;
+
     float shadow_map_size;
 } sokol_global_uniforms_t;
 

@@ -5,12 +5,14 @@ typedef struct depth_vs_uniforms_t {
 } depth_vs_uniforms_t;
 
 typedef struct depth_fs_uniforms_t {
-    vec3 eye_pos;    
+    vec3 eye_pos;
+    float near;
+    float far;
 } depth_fs_uniforms_t;
 
 const char* sokol_vs_depth(void) 
 {
-    return  SOKOL_SHADER_HEADER
+    return SOKOL_SHADER_HEADER
         "uniform mat4 u_mat_vp;\n"
         "uniform vec3 u_eye_pos;\n"
         "layout(location=0) in vec4 v_position;\n"
@@ -24,14 +26,24 @@ const char* sokol_vs_depth(void)
 
 const char* sokol_fs_depth(void) 
 {
-    return  SOKOL_SHADER_HEADER
+    return SOKOL_SHADER_HEADER
         "uniform vec3 u_eye_pos;\n"
+        "uniform float u_near;\n"
+        "uniform float u_far;\n"
         "in vec3 position;\n"
         "out vec4 frag_color;\n"
 
+        "vec4 encodeDepth(float v, float scale) {\n"
+        "    vec4 enc = vec4(1.0, 255.0, 65025.0, 160581375.0) * (v / scale);\n"
+        "    enc = fract(enc);\n"
+        "    enc -= enc.yzww * vec4(1.0/255.0,1.0/255.0,1.0/255.0,0.0);\n"
+        "    return enc;\n"
+        "}\n"
+
         "void main() {\n"
-        "  float depth = length(position);\n"
-        "  frag_color = vec4(depth);\n"
+        "  vec3 psqr = position * position;\n"
+        "  float dsqr = psqr.x + psqr.y + psqr.z;\n"
+        "  frag_color = encodeDepth(dsqr, u_far * u_far);\n"
         "}\n";
 }
 
@@ -52,7 +64,9 @@ sg_pipeline init_depth_pipeline(int32_t sample_count) {
             [0] = {
                 .size = sizeof(depth_fs_uniforms_t),
                 .uniforms = {
-                    [0] = { .name="u_eye_pos", .type=SG_UNIFORMTYPE_FLOAT3 }
+                    [0] = { .name="u_eye_pos", .type=SG_UNIFORMTYPE_FLOAT3 },
+                    [1] = { .name="u_near", .type=SG_UNIFORMTYPE_FLOAT },
+                    [2] = { .name="u_far", .type=SG_UNIFORMTYPE_FLOAT }
                 },
             }            
         },
@@ -85,7 +99,7 @@ sg_pipeline init_depth_pipeline(int32_t sample_count) {
             .write_enabled = true
         },
         .colors = {{
-            .pixel_format = SG_PIXELFORMAT_RGBA16F
+            .pixel_format = SG_PIXELFORMAT_RGBA8
         }},
         .cull_mode = SG_CULLMODE_BACK,
         .sample_count = sample_count
@@ -100,7 +114,7 @@ sokol_offscreen_pass_t sokol_init_depth_pass(
 {
     ecs_trace("sokol: initialize depth pass");
 
-    sg_image color_target = sokol_target_rgba16f(w, h, sample_count, 1);
+    sg_image color_target = sokol_target_rgba8(w, h, sample_count);
     ecs_rgb_t background_color = {0};
 
     return (sokol_offscreen_pass_t){
@@ -146,6 +160,8 @@ void sokol_run_depth_pass(
     
     depth_fs_uniforms_t fs_u;
     glm_vec3_copy(state->uniforms.eye_pos, fs_u.eye_pos);
+    fs_u.near = state->uniforms.near;
+    fs_u.far = state->uniforms.far;
 
     /* Render to offscreen texture so screen-space effects can be applied */
     sg_begin_pass(pass->pass, &pass->pass_action);
