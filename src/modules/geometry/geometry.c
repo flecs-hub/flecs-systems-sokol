@@ -6,6 +6,7 @@ ECS_COMPONENT_DECLARE(SokolGeometryQuery);
 
 ECS_DECLARE(SokolRectangleGeometry);
 ECS_DECLARE(SokolBoxGeometry);
+ECS_DECLARE(SokolBoxStaticGeometry);
 
 ECS_CTOR(SokolGeometry, ptr, {
     *ptr = (SokolGeometry) {0};
@@ -81,15 +82,29 @@ void init_box(
     ecs_world_t *world,
     sokol_resources_t *resources) 
 {
-    SokolGeometry *g = ecs_get_mut(
-        world, ecs_id(SokolBoxGeometry), SokolGeometry, NULL);
-    ecs_assert(g != NULL, ECS_INTERNAL_ERROR, NULL);
+    if (SokolBoxGeometry) {
+        SokolGeometry *g = ecs_get_mut(
+            world, ecs_id(SokolBoxGeometry), SokolGeometry, NULL);
+        ecs_assert(g != NULL, ECS_INTERNAL_ERROR, NULL);
 
-    g->vertex_buffer = resources->box;
-    g->normal_buffer = resources->box_normals;
-    g->index_buffer = resources->box_indices;
-    g->index_count = sokol_box_index_count();
-    g->populate = populate_box;
+        g->vertex_buffer = resources->box;
+        g->normal_buffer = resources->box_normals;
+        g->index_buffer = resources->box_indices;
+        g->index_count = sokol_box_index_count();
+        g->populate = populate_box;
+    }
+
+    if (SokolBoxStaticGeometry) {
+        SokolGeometry *g = ecs_get_mut(
+            world, ecs_id(SokolBoxStaticGeometry), SokolGeometry, NULL);
+        ecs_assert(g != NULL, ECS_INTERNAL_ERROR, NULL);
+
+        g->vertex_buffer = resources->box;
+        g->normal_buffer = resources->box_normals;
+        g->index_buffer = resources->box_indices;
+        g->index_count = sokol_box_index_count();
+        g->populate = populate_box;
+    }
 }
 
 void sokol_init_geometry(
@@ -106,14 +121,22 @@ void populate_buffer(
     sokol_instances_t *instances,
     ecs_query_t *query)
 {
-    if (ecs_query_changed(query)) {
+    if (ecs_query_changed(query, 0)) {
         const ecs_world_t *world = ecs_get_world(query);
         ecs_iter_t qit = ecs_query_iter(world, query);
+        bool changed = false;
 
         /* Count number of instances to ensure GPU buffers are big enough */
         int32_t count = 0;
         while (ecs_query_next(&qit)) {
             count += qit.count;
+            if (ecs_query_changed(query, &qit)) {
+                changed = true;
+            }
+        }
+
+        if (!changed) {
+            return;
         }
 
         if (!count) {
@@ -157,9 +180,9 @@ void populate_buffer(
             while (ecs_query_next(&qit)) {
                 EcsTransform3 *t = ecs_term(&qit, EcsTransform3, 1);
                 SokolMaterialId *mat = ecs_term(&qit, SokolMaterialId, 3);
-                EcsRgb *c = ecs_term(&qit, EcsRgb, 4);
+                EcsRgb *c = ecs_term(&qit, EcsRgb, 5);
 
-                if (ecs_term_is_owned(&qit, 4)) {
+                if (ecs_term_is_owned(&qit, 5)) {
                     for (i = 0; i < qit.count; i ++) {
                         colors[cursor + i].r = c[i].r;
                         colors[cursor + i].g = c[i].g;
@@ -186,6 +209,8 @@ void populate_buffer(
                 }
 
                 memcpy(&transforms[cursor], t, qit.count * sizeof(mat4));
+
+                ecs_assert(geometry->populate != NULL, ECS_INTERNAL_ERROR, NULL);
                 geometry->populate(&qit, cursor, transforms);
                 cursor += qit.count;
             }
@@ -249,7 +274,7 @@ void SokolPopulateGeometry(
     }
 }
 
-static 
+static
 void CreateGeometryQueries(ecs_iter_t *it) {
     ecs_world_t *world = it->world;
     SokolGeometryQuery *sb = ecs_term(it, SokolGeometryQuery, 1);
@@ -265,6 +290,12 @@ void CreateGeometryQueries(ecs_iter_t *it) {
                 comp_path);
         ecs_os_free(comp_path);
 
+        if (sb[i].static_geometry) {
+            strcat(expr, ", flecs.components.geometry.StaticGeometry");
+        } else {
+            strcat(expr, ", !flecs.components.geometry.StaticGeometry");
+        }
+
         sb[i].parent_query = ecs_query_init(world, &(ecs_query_desc_t) {
             .filter.expr = expr,
             .filter.instanced = true
@@ -279,7 +310,7 @@ void CreateGeometryQueries(ecs_iter_t *it) {
         sb[i].solid = ecs_query_init(world, &(ecs_query_desc_t) {
             .filter.expr = subexpr,
             .filter.instanced = true,
-            .parent = sb[i].parent_query
+            .parent = sb[i].parent_query,
         });
 
         sprintf(subexpr, 
@@ -341,10 +372,17 @@ void FlecsSystemsSokolGeometryImport(
     /* Support for box primitive */
     ECS_ENTITY_DEFINE(world, SokolBoxGeometry, Geometry);
         ecs_set(world, SokolBoxGeometry, SokolGeometryQuery, {
-            .component = ecs_id(EcsBox)
+            .component = ecs_id(EcsBox),
+            .static_geometry = false
         });
 
-    /* Create system that manages buffers for rectangles */
-    ECS_SYSTEM(world, SokolPopulateGeometry, EcsPostLoad, 
+    ECS_ENTITY_DEFINE(world, SokolBoxStaticGeometry, Geometry);
+        ecs_set(world, SokolBoxStaticGeometry, SokolGeometryQuery, {
+            .component = ecs_id(EcsBox),
+            .static_geometry = true
+        });
+
+    /* Create system that manages buffers */
+    ECS_SYSTEM(world, SokolPopulateGeometry, EcsPreStore, 
         Geometry, [in] GeometryQuery);       
 }

@@ -12,7 +12,7 @@ void SokolInitMaterials(ecs_iter_t *it) {
     materials->array[0].shininess = 1.0;
     materials->array[0].emissive = 0.0;
 
-    if (!ecs_query_changed(q->query)) {
+    if (!ecs_query_changed(q->query, 0)) {
         materials->changed = false;
         return;
     }

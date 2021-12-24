@@ -54,6 +54,7 @@ typedef struct SokolGeometry {
 
 typedef struct SokolGeometryQuery {
     ecs_entity_t component;
+    bool static_geometry;
     ecs_query_t *parent_query;
     ecs_query_t *solid;
     ecs_query_t *emissive;

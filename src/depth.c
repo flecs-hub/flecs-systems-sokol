@@ -43,7 +43,9 @@ const char* sokol_fs_depth(void)
         "void main() {\n"
         "  vec3 psqr = position * position;\n"
         "  float dsqr = psqr.x + psqr.y + psqr.z;\n"
-        "  frag_color = encodeDepth(dsqr, u_far * u_far);\n"
+        "  float fsqr = u_far * u_far;\n"
+        "  dsqr = min(dsqr, fsqr * 0.999);\n"
+        "  frag_color = encodeDepth(dsqr, fsqr);\n"
         "}\n";
 }
 
