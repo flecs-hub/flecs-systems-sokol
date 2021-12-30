@@ -3,11 +3,19 @@
 #define SOKOL_RESOURCES_H
 
 sg_image sokol_target_rgba8(
+    const char *label,
+    int32_t width, 
+    int32_t height,
+    int32_t sample_count);
+
+sg_image sokol_target_rgba16(
+    const char *label,
     int32_t width, 
     int32_t height,
     int32_t sample_count);
 
 sg_image sokol_target_rgba16f(
+    const char *label,
     int32_t width, 
     int32_t height,
     int32_t sample_count,
@@ -19,11 +27,14 @@ sg_image sokol_target_depth(
     int32_t sample_count);
 
 sg_image sokol_target(
+    const char *label,
     int32_t width, 
     int32_t height,
     int32_t sample_count,
     int32_t num_mipmaps,
     sg_pixel_format format);
+
+sg_image sokol_noise_texture(int32_t width, int32_t height);
 
 sg_buffer sokol_buffer_quad(void);
 

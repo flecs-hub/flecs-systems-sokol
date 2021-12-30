@@ -11,11 +11,9 @@ const char *shd_threshold =
     "float p = min(l_norm * l_norm, l_norm);\n"
     "frag_color = c * p;\n";
 
-static
 const char *shd_blur_hdr =
     "const float gauss[5] = float[] (0.227027, 0.1945946, 0.1216216, 0.054054, 0.016216);\n";
 
-static
 const char *shd_blur =
     "float offset = 0.0;\n"
     "vec4 result = gauss[0] * texture(tex, vec2(uv.x, uv.y));\n"
@@ -49,7 +47,8 @@ const char *shd_hdr =
     "b = b + pow(b_clip, 3.0);\n"
     "c = c + b;\n"
     "c = pow(c, vec3(1.0 / gamma));\n"
-    "frag_color = vec4(c, 1.0);\n";
+    "frag_color = vec4(c, 1.0);\n"
+    ;
 
 #define FX_INPUT_HDR (0)
 #define FX_INPUT_LUM (1)
@@ -124,7 +123,7 @@ SokolFx sokol_init_hdr(
 
     int bloom = sokol_fx_add_pass(&fx, &(sokol_fx_pass_desc_t){
         .name = "bloom",
-        .outputs = {{width, height}},
+        .outputs = {{256}},
         .shader = shd_blend,
         .color_format = SG_PIXELFORMAT_RGBA16F,
         .inputs = { "dst", "src" },

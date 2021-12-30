@@ -76,6 +76,7 @@ typedef struct SokolFx {
 typedef struct sokol_fx_resources_t {
     SokolFx hdr;
     SokolFx fog;
+    SokolFx ssao;
 } sokol_fx_resources_t;
 
 /* Map input index to effect input */

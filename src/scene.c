@@ -1,6 +1,7 @@
 #include "private_api.h"
 
 typedef struct scene_vs_uniforms_t {
+    mat4 mat_v;
     mat4 mat_vp;
     mat4 light_mat_vp;
 } scene_vs_uniforms_t;
@@ -28,8 +29,9 @@ sg_pipeline init_scene_pipeline(int32_t sample_count) {
             [0] = {
                 .size = sizeof(scene_vs_uniforms_t),
                 .uniforms = {
-                    [0] = { .name="u_mat_vp", .type=SG_UNIFORMTYPE_MAT4 },
-                    [1] = { .name="u_light_vp", .type=SG_UNIFORMTYPE_MAT4 }
+                    [0] = { .name="u_mat_v", .type=SG_UNIFORMTYPE_MAT4 },
+                    [1] = { .name="u_mat_vp", .type=SG_UNIFORMTYPE_MAT4 },
+                    [2] = { .name="u_light_vp", .type=SG_UNIFORMTYPE_MAT4 }
                 },
             }
         },
@@ -57,6 +59,7 @@ sg_pipeline init_scene_pipeline(int32_t sample_count) {
         .vs.source =
             SOKOL_SHADER_HEADER
             "uniform mat4 u_mat_vp;\n"
+            "uniform mat4 u_mat_v;\n"
             "uniform mat4 u_light_vp;\n"
             LAYOUT(POSITION_I)  "in vec3 v_position;\n"
             LAYOUT(NORMAL_I)    "in vec3 v_normal;\n"
@@ -80,6 +83,7 @@ sg_pipeline init_scene_pipeline(int32_t sample_count) {
 
         .fs.source =
             SOKOL_SHADER_HEADER
+            "uniform mat4 u_light_vp;\n"
             "uniform vec3 u_light_ambient;\n"
             "uniform vec3 u_light_direction;\n"
             "uniform vec3 u_light_color;\n"
@@ -121,6 +125,7 @@ sg_pipeline init_scene_pipeline(int32_t sample_count) {
             "  float specular_power = material.x;\n"
             "  float shininess = max(material.y, 1.0);\n"
             "  float emissive = material.z;\n"
+
             "  vec3 l = normalize(u_light_direction);\n"
             "  vec3 n = normalize(normal);\n"
             "  float n_dot_l = dot(n, l);\n"
@@ -135,7 +140,7 @@ sg_pipeline init_scene_pipeline(int32_t sample_count) {
             "    float texel_size = 1.0 / u_shadow_map_size;\n"
             "    float s = sampleShadowPCF(shadow_map, sm_uv, texel_size, depth);\n"
             "    s = max(s, emissive);\n"
-            "    s = 1.0;\n"
+            // "    float s = 1.0;\n" // disable shadows for now
 
             "    float r_dot_v = max(dot(r, v), 0.0);\n"
             "    float l_shiny = pow(r_dot_v * n_dot_l, shininess);\n"
@@ -155,11 +160,11 @@ sg_pipeline init_scene_pipeline(int32_t sample_count) {
         .shader = shd,
         .index_type = SG_INDEXTYPE_UINT16,
         .layout = {
-        .buffers = {
-            [COLOR_I] =     { .stride = 16, .step_func=SG_VERTEXSTEP_PER_INSTANCE },
-            [MATERIAL_I] =  { .stride = 12, .step_func=SG_VERTEXSTEP_PER_INSTANCE },
-            [TRANSFORM_I] = { .stride = 64, .step_func=SG_VERTEXSTEP_PER_INSTANCE }
-        },
+            .buffers = {
+                [COLOR_I] =     { .stride = 16, .step_func=SG_VERTEXSTEP_PER_INSTANCE },
+                [MATERIAL_I] =  { .stride = 12, .step_func=SG_VERTEXSTEP_PER_INSTANCE },
+                [TRANSFORM_I] = { .stride = 64, .step_func=SG_VERTEXSTEP_PER_INSTANCE }
+            },
 
             .attrs = {
                 /* Static geometry */
@@ -203,7 +208,7 @@ sokol_offscreen_pass_t sokol_init_scene_pass(
     int32_t sample_count,
     sokol_offscreen_pass_t *depth_pass_out) 
 {
-    sg_image color_target = sokol_target_rgba16f( w, h, sample_count, 1);
+    sg_image color_target = sokol_target_rgba16f("Scene color target", w, h, sample_count, 1);
     sg_image depth_target = sokol_target_depth(w, h, sample_count);
 
     ecs_trace("sokol: initialize scene pass");
@@ -257,6 +262,7 @@ void sokol_run_scene_pass(
     sokol_render_state_t *state)
 {
     scene_vs_uniforms_t vs_u;
+    glm_mat4_copy(state->uniforms.mat_v, vs_u.mat_v);
     glm_mat4_copy(state->uniforms.mat_vp, vs_u.mat_vp);
     glm_mat4_copy(state->uniforms.light_mat_vp, vs_u.light_mat_vp);
     

@@ -7256,7 +7256,10 @@ _SOKOL_PRIVATE void _sg_gl_apply_bindings(
                 SOKOL_ASSERT((gl_shd_img->gl_tex_slot != -1) && gl_tex);
                 _sg_gl_cache_bind_texture(gl_shd_img->gl_tex_slot, img->gl.target, gl_tex);
                 if (img->cmn.render_target && (img->cmn.num_mipmaps > 1)) {
-                    glGenerateMipmap(GL_TEXTURE_2D);   
+                    if (img->cmn.upd_frame_index != _sg.frame_index) {
+                        glGenerateMipmap(GL_TEXTURE_2D);
+                        img->cmn.upd_frame_index = _sg.frame_index;
+                    }
                 }
             }
         }

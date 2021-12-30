@@ -1,8 +1,18 @@
 #include "private_api.h"
 
 typedef struct fx_uniforms_t {
+    float t;
+    float dt;
     float aspect;
+    float near;
+    float far;
+    float target_size[2];
 } fx_uniforms_t;
+
+typedef struct fx_mat_uniforms_t {
+    mat4 mat_p;
+    mat4 inv_mat_p;
+} fx_mat_uniforms_t;
 
 static
 char* fx_build_shader(
@@ -13,9 +23,21 @@ char* fx_build_shader(
     /* Add fx header */
     ecs_strbuf_appendstr(&shad, 
         SOKOL_SHADER_HEADER
+        "#define PI 3.1415926535897932384626433832795\n"
+        "#define PI2 (2.0 * PI)\n"
+        "#define EPSILON 1e-6f\n"
+
         "out vec4 frag_color;\n"
         "in vec2 uv;\n"
-        "uniform float u_aspect;\n");
+        "uniform float u_t;\n"
+        "uniform float u_dt;\n"
+        "uniform float u_aspect;\n"
+        "uniform float u_near;\n"
+        "uniform float u_far;\n"
+        "uniform vec2 u_target_size;\n"
+        "uniform mat4 u_mat_p;\n"
+        "uniform mat4 u_inv_mat_p;\n"
+        "uniform sampler2D u_noise;\n");
 
     /* Add inputs */
     for (int32_t i = 0; i < SOKOL_MAX_FX_INPUTS; i ++) {
@@ -97,17 +119,33 @@ int sokol_fx_add_pass(
                 [0] = {
                     .size = sizeof(fx_uniforms_t),
                     .uniforms = {
-                        [0] = { .name="u_aspect", .type=SG_UNIFORMTYPE_FLOAT }
+                        [0] = { .name="u_t", .type=SG_UNIFORMTYPE_FLOAT },
+                        [1] = { .name="u_dt", .type=SG_UNIFORMTYPE_FLOAT },
+                        [2] = { .name="u_aspect", .type=SG_UNIFORMTYPE_FLOAT },
+                        [3] = { .name="u_near", .type=SG_UNIFORMTYPE_FLOAT },
+                        [4] = { .name="u_far", .type=SG_UNIFORMTYPE_FLOAT },
+                        [5] = { .name="u_target_size", .type=SG_UNIFORMTYPE_FLOAT2 }
                     }
                 },
-                [1] = prog_ub
+                [1] = {
+                    .size = sizeof(fx_mat_uniforms_t),
+                    .uniforms = {
+                        [0] = { .name = "u_mat_p", .type = SG_UNIFORMTYPE_MAT4 },
+                        [1] = { .name = "u_inv_mat_p", .type = SG_UNIFORMTYPE_MAT4 }
+                    }
+                },
+                [2] = prog_ub
             }
         }
     };
 
+    /* Add noise texture by default */
+    prog.fs.images[0].name = "u_noise";
+    prog.fs.images[0].image_type = SG_IMAGETYPE_2D;
+
     /* Add inputs to program */
-    for (int32_t i = 0; i < SOKOL_MAX_FX_INPUTS; i ++) {
-        const char *input = pass_desc->inputs[i];
+    for (int32_t i = 1; i < SOKOL_MAX_FX_INPUTS; i ++) {
+        const char *input = pass_desc->inputs[i - 1];
         if (!input) {
             break;
         }
@@ -195,7 +233,7 @@ int sokol_fx_add_pass(
             output->height = output->width;
         }
 
-        pass->outputs[i].out[0] = sokol_target(output->width, 
+        pass->outputs[i].out[0] = sokol_target(fx->name, output->width, 
             output->height, pass->sample_count, pass->mipmap_count, color_format);
         pass->outputs[i].pass[0] = sg_make_pass(&(sg_pass_desc){
             .color_attachments[0].image = pass->outputs[i].out[0]
@@ -214,7 +252,7 @@ int sokol_fx_add_pass(
 
         /* If multiple steps use output, create intermediate buffer */
         if (step_count > 1) {
-            pass->outputs[i].out[1] = sokol_target(output->width, 
+            pass->outputs[i].out[1] = sokol_target(fx->name, output->width, 
                 output->height, pass->sample_count, pass->mipmap_count, color_format);
             pass->outputs[i].pass[1] = sg_make_pass(&(sg_pass_desc){
                 .color_attachments[0].image = pass->outputs[i].out[1]
@@ -232,7 +270,7 @@ int sokol_fx_add_pass(
 
 static
 void fx_draw(
-    sokol_resources_t *res,
+    sokol_render_state_t *state,
     SokolFx *fx,
     sg_image *inputs,
     sokol_fx_pass_t *pass,
@@ -240,6 +278,8 @@ void fx_draw(
     int32_t width,
     int32_t height)
 {
+    sokol_resources_t *res = state->resources;
+
     for (int32_t i = 0; i < pass->output_count; i ++) {
         pass->outputs[i].toggle = (pass->outputs[i].step_count - 1) % 2;
     }
@@ -253,6 +293,18 @@ void fx_draw(
 
     int32_t step_count = pass->step_count;
     int32_t step_last = step_count * pass->loop_count;
+
+    fx_mat_uniforms_t fs_mat_u;
+    glm_mat4_copy(state->uniforms.mat_p, fs_mat_u.mat_p);
+    glm_mat4_copy(state->uniforms.inv_mat_p, fs_mat_u.inv_mat_p);
+
+    fx_uniforms_t f_u = {
+        .t = state->uniforms.t,
+        .dt = state->uniforms.dt,
+        .aspect = state->uniforms.aspect,
+        .near = state->uniforms.near,
+        .far = state->uniforms.far,
+    };
 
     for (int32_t s = 0; s < step_last; s ++) {
         int8_t step_cur = s % step_count;
@@ -281,21 +333,25 @@ void fx_draw(
 
         sg_apply_pipeline(pass->pip);
 
-        fx_uniforms_t fs_u = {
-            .aspect = (float)width / (float)height
-        };
-
+        f_u.target_size[0] = output->width;
+        f_u.target_size[1] = output->height;
         sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &(sg_range){
-            &fs_u, sizeof(fx_uniforms_t)
+            &f_u, sizeof(fx_uniforms_t) 
+        });
+
+        sg_apply_uniforms(SG_SHADERSTAGE_FS, 1, &(sg_range){
+            &fs_mat_u, sizeof(fx_mat_uniforms_t)
         });
 
         if (pass->param_count) {
-            sg_apply_uniforms(SG_SHADERSTAGE_FS, 1, &(sg_range){
+            sg_apply_uniforms(SG_SHADERSTAGE_FS, 2, &(sg_range){
                 step->params, pass->param_count * sizeof(float)
             });
         }
 
         sg_bindings bind = { .vertex_buffers = { res->quad } };
+        bind.fs_images[0] = res->noise_texture;
+
         for (int32_t i = 0; i < pass->input_count; i ++) {
             sokol_fx_input_t input = step->inputs[i];
 
@@ -306,15 +362,14 @@ void fx_draw(
             if (input.pass == -1) {
                 /* Previous version of current output (for pingponging) */
                 sokol_fx_output_t *io = &pass->outputs[step->output];
-                bind.fs_images[i] = io->out[!io->toggle];
+                bind.fs_images[i + 1] = io->out[!io->toggle];
             } else if (SOKOL_FX_IS_PASS(input.pass)) {
                 /* Pass level input */
-                bind.fs_images[i] = fx->pass[input.pass - SOKOL_MAX_FX_INPUTS]
+                bind.fs_images[i + 1] = fx->pass[input.pass - SOKOL_MAX_FX_INPUTS]
                     .outputs[input.index].out[0];
             } else {
-                // printf("bind %d @ %s.%s to input %d\n", i, pass->name, step->name, input.pass);
                 /* Effect level input */
-                bind.fs_images[i] = inputs[input.pass];
+                bind.fs_images[i + 1] = inputs[input.pass];
             }
         }
 
@@ -339,19 +394,18 @@ sg_image sokol_fx_run(
 
     int32_t width = state->width;
     int32_t height = state->height;
-    sokol_resources_t *res = state->resources;
     int32_t i = 0;
 
     /* Run passes */
     if (!screen_pass) {
         for (; i < fx->pass_count; i ++) {
-            fx_draw(res, fx, inputs, &fx->pass[i], NULL, width, height);
+            fx_draw(state, fx, inputs, &fx->pass[i], NULL, width, height);
         }
     } else {
         for (; i < fx->pass_count - 1; i ++) {
-            fx_draw(res, fx, inputs, &fx->pass[i], NULL, width, height);
+            fx_draw(state, fx, inputs, &fx->pass[i], NULL, width, height);
         }
-        fx_draw(res, fx, inputs, &fx->pass[i], screen_pass, width, height);
+        fx_draw(state, fx, inputs, &fx->pass[i], screen_pass, width, height);
     }
 
     return fx->pass[fx->pass_count - 1].outputs[0].out[0];

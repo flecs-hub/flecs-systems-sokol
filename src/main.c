@@ -157,6 +157,9 @@ void sokol_input_action(const sapp_event* evt, sokol_app_ctx_t *ctx) {
     case SAPP_EVENTTYPE_KEY_DOWN:
         key_down(key_get(input, key_code(evt->key_code)));
         break;
+    case SAPP_EVENTTYPE_RESIZED:
+        // TODO
+        break;
     default:
         break;
     }
@@ -215,10 +218,8 @@ int sokol_run_action(
         .window_title = title,
         .width = width,
         .height = height,
-        .sample_count = 2,
-#ifndef __EMSCRIPTEN__        
+        .sample_count = 1,       
         .high_dpi = true,
-#endif
         .gl_force_gles2 = false
     });
 

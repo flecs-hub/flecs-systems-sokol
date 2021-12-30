@@ -2,6 +2,7 @@
 
 ECS_COMPONENT_DECLARE(SokolRenderer);
 
+/* Static geometry/texture resources */
 static
 sokol_resources_t init_resources(void) {
     return (sokol_resources_t){
@@ -13,10 +14,13 @@ sokol_resources_t init_resources(void) {
 
         .box = sokol_buffer_box(),
         .box_indices = sokol_buffer_box_indices(),
-        .box_normals = sokol_buffer_box_normals()
+        .box_normals = sokol_buffer_box_normals(),
+
+        .noise_texture = sokol_noise_texture(16, 16)
     };
 }
 
+/* Light matrix (used for shadow map calculation) */
 static
 void init_light_mat_vp(
     sokol_render_state_t *state)
@@ -26,14 +30,14 @@ void init_light_mat_vp(
     vec3 lookat = {0.0, 0.0, 0.0};
     vec3 up = {0, 1, 0};
 
-    glm_ortho(-7, 7, -7, 7, -10, 30, mat_p);
+    glm_ortho(-1000, 1000, -1000, 1000, 1.0, 50, mat_p);
 
     vec4 dir = {
         state->light->direction[0],
         state->light->direction[1],
         state->light->direction[2]
     };
-    glm_vec4_scale(dir, 50, dir);
+    glm_vec4_scale(dir, 1.0, dir);
     glm_lookat(dir, lookat, up, mat_v);
 
     mat4 light_proj = {
@@ -47,13 +51,11 @@ void init_light_mat_vp(
     glm_mat4_mul(mat_p, mat_v, state->uniforms.light_mat_vp);
 }
 
+/* Compute uniform values for camera & light that are used across shaders */
 static
 void init_global_uniforms(
     sokol_render_state_t *state)
 {
-    mat4 mat_p;
-    mat4 mat_v;
-
     /* Default camera parameters */
     state->uniforms.near = SOKOL_DEFAULT_DEPTH_NEAR;
     state->uniforms.far = SOKOL_DEFAULT_DEPTH_FAR;
@@ -83,22 +85,24 @@ void init_global_uniforms(
         glm_vec3_copy(cam.lookat, state->uniforms.eye_lookat);
     }
 
-    /* Compute pv matrix */
+    /* Orthographic/perspective projection matrix */
     if (state->uniforms.ortho) {
-        glm_ortho_default(state->aspect, mat_p);
+        glm_ortho_default(state->uniforms.aspect, state->uniforms.mat_p);
     } else {
         glm_perspective(
             state->uniforms.fov, 
-            state->aspect, 
+            state->uniforms.aspect, 
             state->uniforms.near, 
             state->uniforms.far, 
-            mat_p);
+            state->uniforms.mat_p);
     }
+    glm_mat4_inv(state->uniforms.mat_p, state->uniforms.inv_mat_p);
 
-    glm_lookat(state->uniforms.eye_pos, state->uniforms.eye_lookat, state->uniforms.eye_up, mat_v);
-    glm_mat4_mul(mat_p, mat_v, state->uniforms.mat_vp);
+    /* View + view * projection matrix */
+    glm_lookat(state->uniforms.eye_pos, state->uniforms.eye_lookat, state->uniforms.eye_up, state->uniforms.mat_v);
+    glm_mat4_mul(state->uniforms.mat_p, state->uniforms.mat_v, state->uniforms.mat_vp);
 
-    /* Get light parameters */
+    /* Light parameters */
     if (state->light) {
         EcsDirectionalLight l = *state->light;
         glm_vec3_copy(l.direction, state->uniforms.light_direction);
@@ -107,9 +111,9 @@ void init_global_uniforms(
         glm_vec3_zero(state->uniforms.light_direction);
         glm_vec3_zero(state->uniforms.light_color);
     }
-
     glm_vec3_copy((float*)&state->ambient_light, state->uniforms.light_ambient);
 
+    /* Shadow map size */
     state->uniforms.shadow_map_size = SOKOL_SHADOW_MAP_SIZE;
 }
 
@@ -126,11 +130,14 @@ void SokolRender(ecs_iter_t *it) {
         ecs_err("sokol: multiple canvas instances unsupported");
     }
 
+    const ecs_world_info_t *stats = ecs_get_world_info(world);
+
     /* Initialize renderer state */
-    state.delta_time = it->delta_time;
+    state.uniforms.dt = it->delta_time;
+    state.uniforms.t = stats->world_time_total;
     state.width = sapp_width();
     state.height = sapp_height();
-    state.aspect = (float)state.width / (float)state.height;
+    state.uniforms.aspect = (float)state.width / (float)state.height;
     state.world = world;
     state.q_scene = q_buffers->query;
     state.shadow_map = r->shadow_pass.color_target;
@@ -168,14 +175,21 @@ void SokolRender(ecs_iter_t *it) {
     sokol_run_scene_pass(&r->scene_pass, &state);
     sg_image hdr = r->scene_pass.color_target;
 
+    /* Ssao */
+    sg_image ssao = sokol_fx_run(&fx->ssao, 2, (sg_image[]){ 
+        hdr, r->depth_pass.color_target }, 
+            &state, 0);
+
     /* Fog */
-    sg_image fog = sokol_fx_run(&fx->fog, 2, (sg_image[]){ 
-        hdr, r->depth_pass.color_target },
+    sg_image scene_with_fog = sokol_fx_run(&fx->fog, 2, (sg_image[]){ 
+        ssao, r->depth_pass.color_target },
             &state, 0);
 
     /* HDR */
-    sokol_fx_run(&fx->hdr, 1, (sg_image[]){ fog },
+    sokol_fx_run(&fx->hdr, 1, (sg_image[]){ scene_with_fog },
         &state, &r->screen_pass);
+
+    // sokol_run_screen_pass(&r->screen_pass, &r->resources, &state, ssao);
 }
 
 static
@@ -210,7 +224,7 @@ void SokolInitRenderer(ecs_iter_t *it) {
 
     sokol_offscreen_pass_t depth_pass;
     sokol_offscreen_pass_t scene_pass = sokol_init_scene_pass(
-        canvas->background_color, w, h, 2, &depth_pass);
+        canvas->background_color, w, h, 1, &depth_pass);
 
     ecs_set(world, SokolRendererInst, SokolRenderer, {
         .canvas = it->entities[0],

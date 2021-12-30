@@ -8,6 +8,8 @@ typedef struct depth_fs_uniforms_t {
     vec3 eye_pos;
     float near;
     float far;
+    float depth_c;
+    float inv_log_far;
 } depth_fs_uniforms_t;
 
 const char* sokol_vs_depth(void) 
@@ -30,27 +32,37 @@ const char* sokol_fs_depth(void)
         "uniform vec3 u_eye_pos;\n"
         "uniform float u_near;\n"
         "uniform float u_far;\n"
+        "uniform float u_depth_c;\n"
+        "uniform float u_inv_log_far;\n"
         "in vec3 position;\n"
         "out vec4 frag_color;\n"
 
-        "vec4 encodeDepth(float v, float scale) {\n"
-        "    vec4 enc = vec4(1.0, 255.0, 65025.0, 160581375.0) * (v / scale);\n"
-        "    enc = fract(enc);\n"
-        "    enc -= enc.yzww * vec4(1.0/255.0,1.0/255.0,1.0/255.0,0.0);\n"
-        "    return enc;\n"
+        SOKOL_SHADER_FUNC_FLOAT_TO_RGBA
+
+#ifdef SOKOL_LOG_DEPTH
+        "vec4 depth_to_rgba(vec3 pos) {\n"
+        "  vec3 pos_norm = pos / u_far;\n"
+        "  float d = length(pos_norm) * u_far;\n"
+        "  d = clamp(d, 0.0, u_far * 0.98);\n"
+        "  d = log(u_depth_c * d + 1.0) / log(u_depth_c * u_far + 1.0);\n"
+        "  return float_to_rgba(d);\n"
         "}\n"
+#else
+        "vec4 depth_to_rgba(vec3 pos) {\n"
+        "  vec3 pos_norm = pos / u_far;\n"
+        "  float d = length(pos_norm);\n"
+        "  d = clamp(d, 0.0, 1.0);\n"
+        "  return float_to_rgba(d);\n"
+        "}\n"
+#endif
 
         "void main() {\n"
-        "  vec3 psqr = position * position;\n"
-        "  float dsqr = psqr.x + psqr.y + psqr.z;\n"
-        "  float fsqr = u_far * u_far;\n"
-        "  dsqr = min(dsqr, fsqr * 0.999);\n"
-        "  frag_color = encodeDepth(dsqr, fsqr);\n"
+        "  frag_color = depth_to_rgba(position);\n"
         "}\n";
 }
 
 sg_pipeline init_depth_pipeline(int32_t sample_count) {
-    ecs_trace("sokol: initialize depth pipieline");
+    ecs_trace("sokol: initialize depth pipeline");
 
     /* create an instancing shader */
     sg_shader shd = sg_make_shader(&(sg_shader_desc){
@@ -68,7 +80,9 @@ sg_pipeline init_depth_pipeline(int32_t sample_count) {
                 .uniforms = {
                     [0] = { .name="u_eye_pos", .type=SG_UNIFORMTYPE_FLOAT3 },
                     [1] = { .name="u_near", .type=SG_UNIFORMTYPE_FLOAT },
-                    [2] = { .name="u_far", .type=SG_UNIFORMTYPE_FLOAT }
+                    [2] = { .name="u_far", .type=SG_UNIFORMTYPE_FLOAT },
+                    [3] = { .name="u_depth_c", .type = SG_UNIFORMTYPE_FLOAT },
+                    [4] = { .name="u_inv_log_far", .type = SG_UNIFORMTYPE_FLOAT }
                 },
             }            
         },
@@ -116,8 +130,8 @@ sokol_offscreen_pass_t sokol_init_depth_pass(
 {
     ecs_trace("sokol: initialize depth pass");
 
-    sg_image color_target = sokol_target_rgba8(w, h, sample_count);
-    ecs_rgb_t background_color = {0};
+    sg_image color_target = sokol_target_rgba8("Depth color target", w, h, sample_count);
+    ecs_rgb_t background_color = {1, 1, 1};
 
     return (sokol_offscreen_pass_t){
         .pass_action = sokol_clear_action(background_color, true, true),
@@ -164,6 +178,8 @@ void sokol_run_depth_pass(
     glm_vec3_copy(state->uniforms.eye_pos, fs_u.eye_pos);
     fs_u.near = state->uniforms.near;
     fs_u.far = state->uniforms.far;
+    fs_u.depth_c = SOKOL_DEPTH_C;
+    fs_u.inv_log_far = 1.0 / log(SOKOL_DEPTH_C * fs_u.far + 1.0);
 
     /* Render to offscreen texture so screen-space effects can be applied */
     sg_begin_pass(pass->pass, &pass->pass_action);

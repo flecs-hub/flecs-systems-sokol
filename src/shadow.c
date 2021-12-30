@@ -47,7 +47,7 @@ sokol_offscreen_pass_t sokol_init_shadow_pass(
     };
 
     result.depth_target = sokol_target_depth(size, size, 1);
-    result.color_target = sokol_target_rgba8(size, size, 1);
+    result.color_target = sokol_target_rgba8("Shadow map", size, size, 1);
 
     result.pass = sg_make_pass(&(sg_pass_desc){
         .color_attachments[0].image = result.color_target,

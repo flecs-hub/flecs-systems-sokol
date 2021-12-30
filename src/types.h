@@ -9,9 +9,9 @@
 #define SOKOL_MAX_FX_OUTPUTS (8)
 #define SOKOL_MAX_FX_PASS (8)
 #define SOKOL_MAX_FX_PARAMS (32)
-#define SOKOL_SHADOW_MAP_SIZE (1024)
+#define SOKOL_SHADOW_MAP_SIZE (4096)
 #define SOKOL_DEFAULT_DEPTH_NEAR (1.5)
-#define SOKOL_DEFAULT_DEPTH_FAR (2000)
+#define SOKOL_DEFAULT_DEPTH_FAR (1000.0)
 
 /* Immutable resources used by different components to avoid duplication */
 typedef struct sokol_resources_t {
@@ -24,10 +24,16 @@ typedef struct sokol_resources_t {
     sg_buffer box;
     sg_buffer box_indices;
     sg_buffer box_normals;
+
+    sg_image noise_texture;
 } sokol_resources_t;
 
 typedef struct sokol_global_uniforms_t {
+    mat4 mat_v;
+    mat4 mat_p;
     mat4 mat_vp;
+    mat4 inv_mat_p;
+    
     mat4 light_mat_v;
     mat4 light_mat_vp;
 
@@ -39,6 +45,9 @@ typedef struct sokol_global_uniforms_t {
     vec3 eye_up;
     vec3 eye_lookat;
 
+    float t;
+    float dt;
+    float aspect;
     float near;
     float far;
     float fov;
@@ -58,9 +67,6 @@ typedef struct sokol_render_state_t {
     ecs_rgb_t ambient_light;
     int32_t width;
     int32_t height;
-    float aspect;
-    float delta_time;
-    float world_time;
 
     sokol_resources_t *resources;
     sokol_global_uniforms_t uniforms;

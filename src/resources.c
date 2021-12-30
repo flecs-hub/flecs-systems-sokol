@@ -68,6 +68,8 @@ uint16_t box_indices[] = {
     22, 21, 20,  23, 22, 20,
 };
 
+#define EPSILON 0.0000001
+
 static
 void compute_flat_normals(
     vec3 *vertices,
@@ -81,7 +83,17 @@ void compute_flat_normals(
         glm_vec3_sub(vertices[indices[v + 0]], vertices[indices[v + 1]], vec1);
         glm_vec3_sub(vertices[indices[v + 0]], vertices[indices[v + 2]], vec2);
         glm_vec3_crossn(vec2, vec1, normal);
-        
+
+        if (fabs(normal[0]) < GLM_FLT_EPSILON) {
+            normal[0] = 0;
+        }
+        if (fabs(normal[1]) < GLM_FLT_EPSILON) {
+            normal[1] = 0;
+        }
+        if (fabs(normal[2]) < GLM_FLT_EPSILON) {
+            normal[2] = 0;
+        }
+
         glm_vec3_copy(normal, normals_out[indices[v + 0]]);
         glm_vec3_copy(normal, normals_out[indices[v + 1]]);
         glm_vec3_copy(normal, normals_out[indices[v + 2]]);
@@ -89,6 +101,7 @@ void compute_flat_normals(
 }
 
 sg_image sokol_target(
+    const char *label,
     int32_t width, 
     int32_t height,
     int32_t sample_count,
@@ -109,7 +122,7 @@ sg_image sokol_target(
             .mag_filter = SG_FILTER_LINEAR,
             .sample_count = sample_count,
             .num_mipmaps = num_mipmaps,
-            .label = "render target"
+            .label = label
         };
     } else {
         img_desc = (sg_image_desc){
@@ -123,7 +136,7 @@ sg_image sokol_target(
             .mag_filter = SG_FILTER_LINEAR,
             .sample_count = sample_count,
             .num_mipmaps = num_mipmaps,
-            .label = "render target"
+            .label = label
         };
     }
 
@@ -131,20 +144,31 @@ sg_image sokol_target(
 }
 
 sg_image sokol_target_rgba8(
+    const char *label,
     int32_t width, 
     int32_t height,
     int32_t sample_count)
 {
-    return sokol_target(width, height, sample_count, 1, SG_PIXELFORMAT_RGBA8);
+    return sokol_target(label, width, height, sample_count, 1, SG_PIXELFORMAT_RGBA8);
+}
+
+sg_image sokol_target_rgba16(
+    const char *label,
+    int32_t width, 
+    int32_t height,
+    int32_t sample_count)
+{
+    return sokol_target(label, width, height, sample_count, 1, SG_PIXELFORMAT_RGBA16);
 }
 
 sg_image sokol_target_rgba16f(
+    const char *label,
     int32_t width, 
     int32_t height,
     int32_t sample_count,
     int32_t num_mipmaps) 
 {
-    return sokol_target(width, height, sample_count, num_mipmaps, SG_PIXELFORMAT_RGBA16F);
+    return sokol_target(label, width, height, sample_count, num_mipmaps, SG_PIXELFORMAT_RGBA16F);
 }
 
 sg_image sokol_target_depth(
@@ -160,7 +184,7 @@ sg_image sokol_target_depth(
         .min_filter = SG_FILTER_LINEAR,
         .mag_filter = SG_FILTER_LINEAR,
         .sample_count = sample_count,
-        .label = "depth-image"
+        .label = "Depth target"
     };
 
     return sg_make_image(&img_desc);
@@ -278,4 +302,31 @@ const char* sokol_vs_passthrough(void)
             "  gl_Position = v_position;\n"
             "  uv = v_uv;\n"
             "}\n";
+}
+
+sg_image sokol_noise_texture(
+    int32_t width, 
+    int32_t height)
+{
+    uint32_t *data = ecs_os_malloc_n(uint32_t, width * height);
+    for (int32_t x = 0; x < width; x ++) {
+        for (int32_t y = 0; y < height; y ++) {
+            data[x + y * x] = rand();
+        }
+    }
+
+    sg_image img = sg_make_image(&(sg_image_desc){
+        .width = width,
+        .height = height,
+        .wrap_u = SG_WRAP_REPEAT,
+        .wrap_v = SG_WRAP_REPEAT,
+        .pixel_format = SG_PIXELFORMAT_R8,
+        .label = "Noise texture",
+        .data.subimage[0][0] = {
+            .ptr = data,
+            .size = width * height * sizeof(char)
+        }
+    });
+
+    return img;
 }
