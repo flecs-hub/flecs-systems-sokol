@@ -1,5 +1,5 @@
 # flecs-systems-sokol
-Sokol based rendering module for Flecs.
+Sokol based rendering module for [Flecs](https://github.com/SanderMertens/flecs).
 
 ## Features
 - Runs on webasm, macOS, Linux
