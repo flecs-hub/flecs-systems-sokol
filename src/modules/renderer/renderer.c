@@ -277,7 +277,7 @@ void FlecsSystemsSokolRendererImport(
     /* System that initializes renderer */
     ECS_SYSTEM(world, SokolInitRenderer, EcsOnLoad,
         flecs.components.gui.Canvas, 
-        [out] !$flecs.systems.sokol.Renderer);
+        [out] !flecs.systems.sokol.Renderer($));
 
     /* Configure no_staging for SokolInitRenderer as it needs direct access to
      * the world for creating queries */
