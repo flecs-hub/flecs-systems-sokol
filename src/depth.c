@@ -6,8 +6,8 @@ typedef struct depth_vs_uniforms_t {
 
 typedef struct depth_fs_uniforms_t {
     vec3 eye_pos;
-    float near;
-    float far;
+    float near_;
+    float far_;
     float depth_c;
     float inv_log_far;
 } depth_fs_uniforms_t;
@@ -176,10 +176,10 @@ void sokol_run_depth_pass(
     
     depth_fs_uniforms_t fs_u;
     glm_vec3_copy(state->uniforms.eye_pos, fs_u.eye_pos);
-    fs_u.near = state->uniforms.near;
-    fs_u.far = state->uniforms.far;
+    fs_u.near_ = state->uniforms.near_;
+    fs_u.far_ = state->uniforms.far_;
     fs_u.depth_c = SOKOL_DEPTH_C;
-    fs_u.inv_log_far = 1.0 / log(SOKOL_DEPTH_C * fs_u.far + 1.0);
+    fs_u.inv_log_far = 1.0 / log(SOKOL_DEPTH_C * fs_u.far_ + 1.0);
 
     /* Render to offscreen texture so screen-space effects can be applied */
     sg_begin_pass(pass->pass, &pass->pass_action);

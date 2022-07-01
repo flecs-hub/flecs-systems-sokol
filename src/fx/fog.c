@@ -41,7 +41,7 @@ SokolFx sokol_init_fog(
         .steps = {
             [0] = {
                 .inputs = { {FOG_INPUT_HDR}, {FOG_INPUT_DEPTH} },
-                .params = { 1.5}
+                .params = { 1.2}
             }
         }
     });

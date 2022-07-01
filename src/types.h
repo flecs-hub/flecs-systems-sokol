@@ -60,8 +60,8 @@ typedef struct sokol_global_uniforms_t {
     float t;
     float dt;
     float aspect;
-    float near;
-    float far;
+    float near_;
+    float far_;
     float fov;
     bool ortho;
 

@@ -57,8 +57,8 @@ void init_global_uniforms(
     sokol_render_state_t *state)
 {
     /* Default camera parameters */
-    state->uniforms.near = SOKOL_DEFAULT_DEPTH_NEAR;
-    state->uniforms.far = SOKOL_DEFAULT_DEPTH_FAR;
+    state->uniforms.near_ = SOKOL_DEFAULT_DEPTH_NEAR;
+    state->uniforms.far_ = SOKOL_DEFAULT_DEPTH_FAR;
     state->uniforms.fov = 30;
     state->uniforms.ortho = false;
 
@@ -70,9 +70,9 @@ void init_global_uniforms(
             state->uniforms.fov = cam.fov;
         }
 
-        if (cam.near || cam.far) {
-            state->uniforms.near = cam.near;
-            state->uniforms.far = cam.far;
+        if (cam.near_ || cam.far_) {
+            state->uniforms.near_ = cam.near_;
+            state->uniforms.far_ = cam.far_;
         }
 
         if (cam.up[0] || !cam.up[1] || !cam.up[2]) {
@@ -92,8 +92,8 @@ void init_global_uniforms(
         glm_perspective(
             state->uniforms.fov, 
             state->uniforms.aspect, 
-            state->uniforms.near, 
-            state->uniforms.far, 
+            state->uniforms.near_, 
+            state->uniforms.far_, 
             state->uniforms.mat_p);
     }
     glm_mat4_inv(state->uniforms.mat_p, state->uniforms.inv_mat_p);

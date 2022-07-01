@@ -4,8 +4,8 @@ typedef struct fx_uniforms_t {
     float t;
     float dt;
     float aspect;
-    float near;
-    float far;
+    float near_;
+    float far_;
     float target_size[2];
 } fx_uniforms_t;
 
@@ -302,8 +302,8 @@ void fx_draw(
         .t = state->uniforms.t,
         .dt = state->uniforms.dt,
         .aspect = state->uniforms.aspect,
-        .near = state->uniforms.near,
-        .far = state->uniforms.far,
+        .near_ = state->uniforms.near_,
+        .far_ = state->uniforms.far_,
     };
 
     for (int32_t s = 0; s < step_last; s ++) {
