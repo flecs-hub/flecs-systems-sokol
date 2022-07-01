@@ -4,7 +4,7 @@ ECS_COMPONENT_DECLARE(SokolMaterialId);
 ECS_COMPONENT_DECLARE(SokolMaterials);
 
 void SokolInitMaterials(ecs_iter_t *it) {
-    const EcsQuery *q = ecs_term(it, EcsQuery, 1);
+    const SokolQuery *q = ecs_term(it, SokolQuery, 1);
     SokolMaterials *materials = ecs_term(it, SokolMaterials, 2);
 
     materials->changed = true;
@@ -92,11 +92,11 @@ void FlecsSystemsSokolMaterialsImport(
 
     /* System that initializes material array that's sent to vertex shader */
     ECS_SYSTEM(world, SokolInitMaterials, EcsOnLoad,
-        [in]   Query(InitMaterials, SokolMaterials),
+        [in]   sokol.Query(InitMaterials, SokolMaterials),
         [out]  SokolMaterials);
 
     /* Set material query for InitMaterials system */
-    ecs_set_pair(world, SokolInitMaterials, EcsQuery, ecs_id(SokolMaterials), {
+    ecs_set_pair(world, SokolInitMaterials, SokolQuery, ecs_id(SokolMaterials),{
         ecs_query_new(world, material_query)
     });
 

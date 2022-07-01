@@ -353,7 +353,7 @@ void FlecsSystemsSokolGeometryImport(
     ECS_COMPONENT_DEFINE(world, SokolGeometry);
     ECS_COMPONENT_DEFINE(world, SokolGeometryQuery);
 
-    ecs_set_component_actions(world, SokolGeometry, {
+    ecs_set_hooks(world, SokolGeometry, {
         .ctor = ecs_ctor(SokolGeometry),
         .dtor = ecs_dtor(SokolGeometry)
     });

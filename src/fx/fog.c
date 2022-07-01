@@ -14,6 +14,7 @@ const char *shd_fog =
     "float d = (rgba_to_depth(texture(depth, uv)) / u_far);\n"
     "vec4 fog_color = vec4(0.3, 0.6, 0.9, 1.0);\n"
     "float intensity = 1.0 - exp2(-(d * d) * u_density * u_density * LOG2);\n"
+    "intensity *= 1.1;\n"
     "frag_color = mix(c, fog_color, intensity);\n"
     ;
 
@@ -40,7 +41,7 @@ SokolFx sokol_init_fog(
         .steps = {
             [0] = {
                 .inputs = { {FOG_INPUT_HDR}, {FOG_INPUT_DEPTH} },
-                .params = { 1.5 }
+                .params = { 1.5}
             }
         }
     });

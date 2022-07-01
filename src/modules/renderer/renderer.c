@@ -122,7 +122,7 @@ static
 void SokolRender(ecs_iter_t *it) {
     ecs_world_t *world = it->world;
     SokolRenderer *r = ecs_term(it, SokolRenderer, 1);
-    EcsQuery *q_buffers = ecs_term(it, EcsQuery, 2);
+    SokolQuery *q_buffers = ecs_term(it, SokolQuery, 2);
     sokol_render_state_t state = {0};
     sokol_fx_resources_t *fx = r->fx;
 
@@ -240,7 +240,7 @@ void SokolInitRenderer(ecs_iter_t *it) {
 
     ecs_set(world, SokolRendererInst, SokolMaterials, { true });
 
-    ecs_set_pair(world, SokolRendererInst, EcsQuery, ecs_id(SokolGeometry), {
+    ecs_set_pair(world, SokolRendererInst, SokolQuery, ecs_id(SokolGeometry), {
         ecs_query_new(world, "[in] flecs.systems.sokol.Geometry")
     });
 
@@ -293,7 +293,7 @@ void FlecsSystemsSokolRendererImport(
     /* System that orchestrates the render tasks */
     ECS_SYSTEM(world, SokolRender, EcsOnStore, 
         flecs.systems.sokol.Renderer,
-        (flecs.core.Query, Geometry));
+        (sokol.Query, Geometry));
 
     /* System that calls sg_commit */
     ECS_SYSTEM(world, SokolCommit, EcsOnStore, 0);

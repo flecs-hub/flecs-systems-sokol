@@ -8,8 +8,8 @@ const char *shd_ssao_header =
     "#define NUM_SAMPLES 10\n"
     // The sample kernel uses a spiral pattern so most samples are concentrated
     // close to the center. 
-    "#define NUM_RINGS 4\n"
-    "#define KERNEL_RADIUS 70.0\n"
+    "#define NUM_RINGS 3\n"
+    "#define KERNEL_RADIUS 35.0\n"
     // Intensity of the effect.
     "#define INTENSITY 1.0\n"
     // Max threshold prevents darkening objects that are far away
@@ -144,15 +144,22 @@ const char *shd_blend_mult =
 SokolFx sokol_init_ssao(
     int width, int height)
 {
-    ecs_trace("sokol: initialize fog effect");
+    ecs_trace("sokol: initialize ambient occlusion effect");
 
     SokolFx fx = {0};
-    fx.name = "SSAO";
+    fx.name = "AmbientOcclusion";
+
+    int ao_width = width, ao_height = height;
+
+    if (SOKOL_HIGH_DPI) {
+        ao_width /= 2.0;
+        ao_height /= 2.0;
+    }
 
     // Ambient occlusion shader 
     int32_t ao = sokol_fx_add_pass(&fx, &(sokol_fx_pass_desc_t){
         .name = "ssao",
-        .outputs = {{width, height}},
+        .outputs = {{ao_width, ao_height}},
         .shader_header = shd_ssao_header,
         .shader = shd_ssao,
         .color_format = SG_PIXELFORMAT_RGBA8,

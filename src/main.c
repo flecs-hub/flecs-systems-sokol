@@ -9,6 +9,8 @@
 #define SOKOL_NO_ENTRY
 #include "private_api.h"
 
+ECS_COMPONENT_DECLARE(SokolQuery);
+
 /* Application wrapper */
 
 typedef struct {
@@ -218,8 +220,8 @@ int sokol_run_action(
         .window_title = title,
         .width = width,
         .height = height,
-        .sample_count = 1,       
-        .high_dpi = true,
+        .sample_count = 1,
+        .high_dpi = SOKOL_HIGH_DPI,
         .gl_force_gles2 = false
     });
 
@@ -232,6 +234,8 @@ void FlecsSystemsSokolImport(
     ECS_MODULE(world, FlecsSystemsSokol);
 
     ecs_set_name_prefix(world, "Sokol");
+
+    ECS_COMPONENT_DEFINE(world, SokolQuery);
     
     ECS_IMPORT(world, FlecsComponentsGui);
     ECS_IMPORT(world, FlecsComponentsInput);

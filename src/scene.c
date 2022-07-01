@@ -134,13 +134,13 @@ sg_pipeline init_scene_pipeline(int32_t sample_count) {
             "    vec3 v = normalize(u_eye_pos - position.xyz);\n"
             "    vec3 r = reflect(-l, n);\n"
 
-            "    vec3 light_pos = light_position.xyz / light_position.w;\n"
-            "    vec2 sm_uv = (light_pos.xy + 1.0) * 0.5;\n"
-            "    float depth = light_position.z;\n"
-            "    float texel_size = 1.0 / u_shadow_map_size;\n"
-            "    float s = sampleShadowPCF(shadow_map, sm_uv, texel_size, depth);\n"
-            "    s = max(s, emissive);\n"
-            // "    float s = 1.0;\n" // disable shadows for now
+            // "    vec3 light_pos = light_position.xyz / light_position.w;\n"
+            // "    vec2 sm_uv = (light_pos.xy + 1.0) * 0.5;\n"
+            // "    float depth = light_position.z;\n"
+            // "    float texel_size = 1.0 / u_shadow_map_size;\n"
+            // "    float s = sampleShadowPCF(shadow_map, sm_uv, texel_size, depth);\n"
+            // "    s = max(s, emissive);\n"
+            "    float s = 1.0;\n" // disable shadows for now
 
             "    float r_dot_v = max(dot(r, v), 0.0);\n"
             "    float l_shiny = pow(r_dot_v * n_dot_l, shininess);\n"

@@ -10,8 +10,20 @@
 #define SOKOL_MAX_FX_PASS (8)
 #define SOKOL_MAX_FX_PARAMS (32)
 #define SOKOL_SHADOW_MAP_SIZE (4096)
-#define SOKOL_DEFAULT_DEPTH_NEAR (1.5)
-#define SOKOL_DEFAULT_DEPTH_FAR (1000.0)
+#define SOKOL_DEFAULT_DEPTH_NEAR (2.0)
+#define SOKOL_DEFAULT_DEPTH_FAR (2500.0)
+
+#ifndef __EMSCRIPTEN__
+#define SOKOL_HIGH_DPI true
+#else
+#define SOKOL_HIGH_DPI false
+#endif
+
+typedef struct SokolQuery {
+    ecs_query_t *query;
+} SokolQuery;
+
+extern ECS_COMPONENT_DECLARE(SokolQuery);
 
 /* Immutable resources used by different components to avoid duplication */
 typedef struct sokol_resources_t {
