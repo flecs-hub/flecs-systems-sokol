@@ -67,7 +67,7 @@ void init_rect(
     sokol_resources_t *resources) 
 {
     SokolGeometry *g = ecs_get_mut(
-        world, ecs_id(SokolRectangleGeometry), SokolGeometry, NULL);
+        world, ecs_id(SokolRectangleGeometry), SokolGeometry);
     ecs_assert(g != NULL, ECS_INTERNAL_ERROR, NULL);
 
     g->vertex_buffer = resources->rect;
@@ -84,7 +84,7 @@ void init_box(
 {
     if (SokolBoxGeometry) {
         SokolGeometry *g = ecs_get_mut(
-            world, ecs_id(SokolBoxGeometry), SokolGeometry, NULL);
+            world, ecs_id(SokolBoxGeometry), SokolGeometry);
         ecs_assert(g != NULL, ECS_INTERNAL_ERROR, NULL);
 
         g->vertex_buffer = resources->box;
@@ -96,7 +96,7 @@ void init_box(
 
     if (SokolBoxStaticGeometry) {
         SokolGeometry *g = ecs_get_mut(
-            world, ecs_id(SokolBoxStaticGeometry), SokolGeometry, NULL);
+            world, ecs_id(SokolBoxStaticGeometry), SokolGeometry);
         ecs_assert(g != NULL, ECS_INTERNAL_ERROR, NULL);
 
         g->vertex_buffer = resources->box;
