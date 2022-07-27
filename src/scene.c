@@ -283,7 +283,7 @@ void sokol_run_scene_pass(
     /* Loop geometry, render scene */
     ecs_iter_t qit = ecs_query_iter(state->world, state->q_scene);
     while (ecs_query_next(&qit)) {
-        SokolGeometry *geometry = ecs_term(&qit, SokolGeometry, 1);
+        SokolGeometry *geometry = ecs_field(&qit, SokolGeometry, 1);
 
         int b;
         for (b = 0; b < qit.count; b ++) {

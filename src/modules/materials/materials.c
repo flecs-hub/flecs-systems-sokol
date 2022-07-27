@@ -4,8 +4,8 @@ ECS_COMPONENT_DECLARE(SokolMaterialId);
 ECS_COMPONENT_DECLARE(SokolMaterials);
 
 void SokolInitMaterials(ecs_iter_t *it) {
-    const SokolQuery *q = ecs_term(it, SokolQuery, 1);
-    SokolMaterials *materials = ecs_term(it, SokolMaterials, 2);
+    const SokolQuery *q = ecs_field(it, SokolQuery, 1);
+    SokolMaterials *materials = ecs_field(it, SokolMaterials, 2);
 
     materials->changed = true;
     materials->array[0].specular_power = 0.0;
@@ -19,9 +19,9 @@ void SokolInitMaterials(ecs_iter_t *it) {
 
     ecs_iter_t qit = ecs_query_iter(it->world, q->query);
     while (ecs_query_next(&qit)) {
-        SokolMaterialId *mat = ecs_term(&qit, SokolMaterialId, 1);
-        EcsSpecular *spec = ecs_term(&qit, EcsSpecular, 2);
-        EcsEmissive *em = ecs_term(&qit, EcsEmissive, 3);
+        SokolMaterialId *mat = ecs_field(&qit, SokolMaterialId, 1);
+        EcsSpecular *spec = ecs_field(&qit, EcsSpecular, 2);
+        EcsEmissive *em = ecs_field(&qit, EcsEmissive, 3);
 
         int i;
         if (spec) {

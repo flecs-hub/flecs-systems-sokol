@@ -27,10 +27,10 @@ ECS_DTOR(SokolGeometry, ptr, {
 
 static
 void populate_rectangle(ecs_iter_t *qit, int32_t offset, mat4 *transforms) {
-    EcsRectangle *r = ecs_term(qit, EcsRectangle, 2);
+    EcsRectangle *r = ecs_field(qit, EcsRectangle, 2);
 
     int i;
-    if (ecs_term_is_owned(qit, 2)) {
+    if (ecs_field_is_self(qit, 2)) {
         for (i = 0; i < qit->count; i ++) {
             vec3 scale = {r[i].width, r[i].height, 1.0};
             glm_scale(transforms[offset + i], scale);
@@ -45,10 +45,10 @@ void populate_rectangle(ecs_iter_t *qit, int32_t offset, mat4 *transforms) {
 
 static
 void populate_box(ecs_iter_t *qit, int32_t offset, mat4 *transforms) {
-    EcsBox *b = ecs_term(qit, EcsBox, 2);
+    EcsBox *b = ecs_field(qit, EcsBox, 2);
     
     int i;
-    if (ecs_term_is_owned(qit, 2)) {
+    if (ecs_field_is_self(qit, 2)) {
         for (i = 0; i < qit->count; i ++) {
             vec3 scale = {b[i].width, b[i].height, b[i].depth};
             glm_scale(transforms[offset + i], scale);
@@ -178,11 +178,11 @@ void populate_buffer(
 
             ecs_iter_t qit = ecs_query_iter(world, query);
             while (ecs_query_next(&qit)) {
-                EcsTransform3 *t = ecs_term(&qit, EcsTransform3, 1);
-                SokolMaterialId *mat = ecs_term(&qit, SokolMaterialId, 3);
-                EcsRgb *c = ecs_term(&qit, EcsRgb, 5);
+                EcsTransform3 *t = ecs_field(&qit, EcsTransform3, 1);
+                SokolMaterialId *mat = ecs_field(&qit, SokolMaterialId, 3);
+                EcsRgb *c = ecs_field(&qit, EcsRgb, 5);
 
-                if (ecs_term_is_owned(&qit, 5)) {
+                if (ecs_field_is_self(&qit, 5)) {
                     for (i = 0; i < qit.count; i ++) {
                         colors[cursor + i].r = c[i].r;
                         colors[cursor + i].g = c[i].g;
@@ -263,8 +263,8 @@ static
 void SokolPopulateGeometry(
     ecs_iter_t *it) 
 {
-    SokolGeometry *g = ecs_term(it, SokolGeometry, 1);
-    SokolGeometryQuery *q = ecs_term(it, SokolGeometryQuery, 2);
+    SokolGeometry *g = ecs_field(it, SokolGeometry, 1);
+    SokolGeometryQuery *q = ecs_field(it, SokolGeometryQuery, 2);
 
     int i;
     for (i = 0; i < it->count; i ++) {
@@ -277,7 +277,7 @@ void SokolPopulateGeometry(
 static
 void CreateGeometryQueries(ecs_iter_t *it) {
     ecs_world_t *world = it->world;
-    SokolGeometryQuery *sb = ecs_term(it, SokolGeometryQuery, 1);
+    SokolGeometryQuery *sb = ecs_field(it, SokolGeometryQuery, 1);
 
     int i;
     for (i = 0; i < it->count; i ++) {
@@ -285,8 +285,8 @@ void CreateGeometryQueries(ecs_iter_t *it) {
         char expr[255], subexpr[512];
         sprintf(expr, 
             "[in] flecs.components.transform.Transform3,"
-            "[in] %s(self|super),"
-            "[in] ?flecs.systems.sokol.MaterialId(super)",
+            "[in] %s(self|up),"
+            "[in] ?flecs.systems.sokol.MaterialId(up)",
                 comp_path);
         ecs_os_free(comp_path);
 
@@ -296,18 +296,18 @@ void CreateGeometryQueries(ecs_iter_t *it) {
             strcat(expr, ", !flecs.components.geometry.StaticGeometry");
         }
 
-        sb[i].parent_query = ecs_query_init(world, &(ecs_query_desc_t) {
+        sb[i].parent_query = ecs_query(world, {
             .filter.expr = expr,
             .filter.instanced = true
         });
 
         sprintf(subexpr, 
             "%s,"
-            "[in] flecs.components.graphics.Rgb(self|super),"
-            "[in] !flecs.components.graphics.Emissive(super),"
-            "[in] !flecs.components.graphics.Rgba(self|super)", 
+            "[in] flecs.components.graphics.Rgb(self|up),"
+            "[in] !flecs.components.graphics.Emissive(up),"
+            "[in] !flecs.components.graphics.Rgba(self|up)", 
                 expr);
-        sb[i].solid = ecs_query_init(world, &(ecs_query_desc_t) {
+        sb[i].solid = ecs_query(world, {
             .filter.expr = subexpr,
             .filter.instanced = true,
             .parent = sb[i].parent_query,
@@ -315,10 +315,10 @@ void CreateGeometryQueries(ecs_iter_t *it) {
 
         sprintf(subexpr, 
             "%s,"
-            "[in] flecs.components.graphics.Rgb(self|super),"
-            "[in] flecs.components.graphics.Emissive(super),"
-            "[in] !flecs.components.graphics.Rgba(self|super)", expr);
-        sb[i].emissive = ecs_query_init(world, &(ecs_query_desc_t) {
+            "[in] flecs.components.graphics.Rgb(self|up),"
+            "[in] flecs.components.graphics.Emissive(up),"
+            "[in] !flecs.components.graphics.Rgba(self|up)", expr);
+        sb[i].emissive = ecs_query(world, {
             .filter.expr = subexpr,
             .filter.instanced = true,
             .parent = sb[i].parent_query
@@ -326,10 +326,10 @@ void CreateGeometryQueries(ecs_iter_t *it) {
 
         sprintf(subexpr,
             "%s,"
-            "[in] !flecs.components.graphics.Rgb(self|super),"
-            "[in] flecs.components.graphics.Emissive(self|super),"
-            "[in] flecs.components.graphics.Rgba(self|super)", expr);
-        sb[i].transparent = ecs_query_init(world, &(ecs_query_desc_t) {
+            "[in] !flecs.components.graphics.Rgb(self|up),"
+            "[in] flecs.components.graphics.Emissive(self|up),"
+            "[in] flecs.components.graphics.Rgba(self|up)", expr);
+        sb[i].transparent = ecs_query(world, {
             .filter.expr = subexpr,
             .filter.instanced = true,
             .parent = sb[i].parent_query

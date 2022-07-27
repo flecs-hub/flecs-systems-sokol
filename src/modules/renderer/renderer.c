@@ -121,8 +121,8 @@ void init_global_uniforms(
 static
 void SokolRender(ecs_iter_t *it) {
     ecs_world_t *world = it->world;
-    SokolRenderer *r = ecs_term(it, SokolRenderer, 1);
-    SokolQuery *q_buffers = ecs_term(it, SokolQuery, 2);
+    SokolRenderer *r = ecs_field(it, SokolRenderer, 1);
+    SokolQuery *q_buffers = ecs_field(it, SokolQuery, 2);
     sokol_render_state_t state = {0};
     sokol_fx_resources_t *fx = r->fx;
 
@@ -201,7 +201,7 @@ void SokolCommit(ecs_iter_t *it) {
 static
 void SokolInitRenderer(ecs_iter_t *it) {
     ecs_world_t *world = it->world;
-    EcsCanvas *canvas = ecs_term(it, EcsCanvas, 1);
+    EcsCanvas *canvas = ecs_field(it, EcsCanvas, 1);
 
     if (it->count > 1) {
         ecs_err("sokol: multiple canvas instances unsupported");
@@ -281,8 +281,8 @@ void FlecsSystemsSokolRendererImport(
 
     /* Configure no_staging for SokolInitRenderer as it needs direct access to
      * the world for creating queries */
-    ecs_system_init(world, &(ecs_system_desc_t) {
-        .entity.entity = SokolInitRenderer,
+    ecs_system(world, {
+        .entity = SokolInitRenderer,
         .no_staging = true
     });
 

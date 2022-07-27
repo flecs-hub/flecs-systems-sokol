@@ -198,7 +198,7 @@ int sokol_run_action(
     const char *title = "Flecs App";
 
     if (ecs_term_next(&it)) {
-        EcsCanvas *canvas = ecs_term(&it, EcsCanvas, 1);
+        EcsCanvas *canvas = ecs_field(&it, EcsCanvas, 1);
         width = canvas->width;
         height = canvas->height;
         title = canvas->title;
