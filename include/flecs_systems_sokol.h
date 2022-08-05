@@ -17,15 +17,18 @@ void FlecsSystemsSokolImport(
 #endif
 
 #ifdef __cplusplus
+#ifndef FLECS_NO_CPP
 
 namespace flecs {
 namespace systems {
 
-class sokol : FlecsSystemsSokol {
+class sokol {
 public:
     sokol(flecs::world& ecs) {
-        FlecsSystemsSokolImport(ecs.c_ptr());
+        // Load module contents
+        FlecsSystemsSokolImport(ecs);
 
+        // Bind C++ types with module contents
         ecs.module<flecs::systems::sokol>();
     }
 };
@@ -33,6 +36,7 @@ public:
 }
 }
 
+#endif
 #endif
 
 #endif
