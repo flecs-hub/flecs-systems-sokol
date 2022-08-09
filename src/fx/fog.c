@@ -12,9 +12,8 @@ const char *shd_fog =
     "#define LOG2 1.442695\n"
     "vec4 c = texture(hdr, uv);\n"
     "float d = (rgba_to_depth(texture(depth, uv)) / u_far);\n"
-    "vec4 fog_color = vec4(0.3, 0.6, 0.9, 1.0);\n"
+    "vec4 fog_color = vec4(u_r, u_g, u_b, 1.0);\n"
     "float intensity = 1.0 - exp2(-(d * d) * u_density * u_density * LOG2);\n"
-    "intensity *= 1.1;\n"
     "frag_color = mix(c, fog_color, intensity);\n"
     ;
 
@@ -37,14 +36,28 @@ SokolFx sokol_init_fog(
         .color_format = SG_PIXELFORMAT_RGBA16F,
         .mipmap_count = 2,
         .inputs = { "hdr", "depth" },
-        .params = { "u_density" },
+        .params = { "u_density", "u_r", "u_g", "u_b" },
         .steps = {
             [0] = {
                 .inputs = { {FOG_INPUT_HDR}, {FOG_INPUT_DEPTH} },
-                .params = { 1.2}
+                .params = { 1.2, 0.0, 0.0, 0.0 }
             }
         }
     });
 
     return fx;
+}
+
+void sokol_fog_set_params(
+    SokolFx *fx,
+    float density,
+    float r,
+    float g,
+    float b)
+{
+    float *params = fx->pass[0].steps[0].params;
+    params[0] = density;
+    params[1] = r;
+    params[2] = g;
+    params[3] = b;
 }

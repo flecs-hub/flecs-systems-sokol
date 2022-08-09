@@ -69,4 +69,11 @@ SokolFx sokol_init_ssao(
 sokol_fx_resources_t* sokol_init_fx(
     int width, int height);
 
+void sokol_fog_set_params(
+    SokolFx *fx,
+    float r,
+    float g,
+    float b,
+    float density);
+
 #endif
