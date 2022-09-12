@@ -58,16 +58,16 @@ extern const char *shd_blur_hdr;
 extern const char *shd_blur;
 
 SokolFx sokol_init_hdr(
-    int width, int height);
+    int width, 
+    int height);
 
 SokolFx sokol_init_fog(
-    int width, int height);
+    int width,
+    int height);
 
 SokolFx sokol_init_ssao(
-    int width, int height);
-
-sokol_fx_resources_t* sokol_init_fx(
-    int width, int height);
+    int width, 
+    int height);
 
 void sokol_fog_set_params(
     SokolFx *fx,
@@ -75,5 +75,14 @@ void sokol_fog_set_params(
     float g,
     float b,
     float density);
+
+sokol_fx_resources_t* sokol_init_fx(
+    int width, 
+    int height);
+
+void sokol_update_fx(
+    sokol_fx_resources_t *fx, 
+    int width, 
+    int height);
 
 #endif

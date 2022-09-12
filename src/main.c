@@ -143,8 +143,25 @@ void keys_reset(
 }
 
 static
+ecs_entity_t sokol_get_canvas(const ecs_world_t *world) {
+    ecs_entity_t result = 0;
+
+    ecs_iter_t it = ecs_term_iter(world, &(ecs_term_t) {
+        .id = ecs_id(EcsCanvas)
+    });
+
+    if (ecs_term_next(&it)) {
+        result = it.entities[0];
+        ecs_iter_fini(&it);
+    }
+
+    return result;
+}
+
+static
 void sokol_input_action(const sapp_event* evt, sokol_app_ctx_t *ctx) {
-    EcsInput *input = ecs_singleton_get_mut(ctx->world, EcsInput);
+    ecs_world_t *world = ctx->world;
+    EcsInput *input = ecs_singleton_get_mut(world, EcsInput);
 
     switch (evt->type) {
     case SAPP_EVENTTYPE_MOUSE_DOWN:
@@ -159,9 +176,9 @@ void sokol_input_action(const sapp_event* evt, sokol_app_ctx_t *ctx) {
     case SAPP_EVENTTYPE_KEY_DOWN:
         key_down(key_get(input, key_code(evt->key_code)));
         break;
-    case SAPP_EVENTTYPE_RESIZED:
-        // TODO
+    case SAPP_EVENTTYPE_RESIZED: {
         break;
+    }
     default:
         break;
     }
@@ -189,23 +206,21 @@ int sokol_run_action(
         .desc = desc
     };
 
-    /* Find canvas instance for width, height & title */
-    ecs_iter_t it = ecs_term_iter(world, &(ecs_term_t) {
-        .id = ecs_id(EcsCanvas)
-    });
-
     int width = 800, height = 600;
     const char *title = "Flecs App";
 
-    if (ecs_term_next(&it)) {
-        EcsCanvas *canvas = ecs_field(&it, EcsCanvas, 1);
-        width = canvas->width;
-        height = canvas->height;
-        title = canvas->title;
+    /* Find canvas instance for width, height & title */
+    ecs_entity_t canvas = sokol_get_canvas(world);
+    if (canvas) {
+        const EcsCanvas *canvas_data = ecs_get(world, canvas, EcsCanvas);
+        width = canvas_data->width;
+        height = canvas_data->height;
     }
 
-    /* If there is more than one canvas, ignore */
-    while (ecs_term_next(&it)) { }
+#ifdef __EMSCRIPTEN__
+    width = 0; /* determined by browser */
+    height = 0;
+#endif
 
     /* Initialize input component */
     ecs_singleton_set(world, EcsInput, { 0 });
@@ -221,7 +236,7 @@ int sokol_run_action(
         .width = width,
         .height = height,
         .sample_count = 1,
-        .high_dpi = SOKOL_HIGH_DPI,
+        .high_dpi = true,
         .gl_force_gles2 = false
     });
 

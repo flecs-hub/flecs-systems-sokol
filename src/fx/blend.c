@@ -13,6 +13,5 @@ SokolFx sokol_init_blend(
     SokolFx fx = {0};
     fx.name = "Blend";
 
-
     return fx;
 }

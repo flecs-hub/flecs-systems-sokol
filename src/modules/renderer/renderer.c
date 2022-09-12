@@ -143,8 +143,22 @@ void SokolRender(ecs_iter_t *it) {
     state.shadow_map = r->shadow_pass.color_target;
     state.resources = &r->resources;
 
-    /* Load active camera & light data from canvas */
     const EcsCanvas *canvas = ecs_get(world, r->canvas, EcsCanvas);
+
+    /* Resize resources if canvas changed */
+    if (state.width != canvas->width || state.height != canvas->height) {
+        EcsCanvas *canvas_w = ecs_get_mut(world, r->canvas, EcsCanvas);
+        canvas_w->width = state.width;
+        canvas_w->height = state.height;
+        ecs_modified(world, r->canvas, EcsCanvas);
+
+        ecs_dbg_3("sokol: update canvas size to %d, %d", state.width, state.height);
+        sokol_update_scene_pass(&r->scene_pass, state.width, state.height,
+            &r->depth_pass);
+        sokol_update_fx(r->fx, state.width, state.height);
+    }
+
+    /* Load active camera & light data from canvas */
     if (canvas->camera) {
         state.camera = ecs_get(world, canvas->camera, EcsCamera);
     }
@@ -191,8 +205,6 @@ void SokolRender(ecs_iter_t *it) {
     /* HDR */
     sokol_fx_run(&fx->hdr, 1, (sg_image[]){ scene_with_fog },
         &state, &r->screen_pass);
-
-    // sokol_run_screen_pass(&r->screen_pass, &r->resources, &state, hdr);
 }
 
 static

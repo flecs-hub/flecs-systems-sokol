@@ -201,6 +201,23 @@ sg_pipeline init_scene_pipeline(int32_t sample_count) {
     });
 }
 
+static
+void update_scene_pass(
+    sokol_offscreen_pass_t *pass,
+    int32_t w, 
+    int32_t h,
+    int32_t sample_count)
+{
+    pass->color_target = sokol_target_rgba16f(
+        "Scene color target", w, h, sample_count, 1);
+    pass->depth_target = sokol_target_depth(w, h, sample_count);
+
+    pass->pass = sg_make_pass(&(sg_pass_desc){
+        .color_attachments[0].image = pass->color_target,
+        .depth_stencil_attachment.image = pass->depth_target
+    });
+}
+
 sokol_offscreen_pass_t sokol_init_scene_pass(
     ecs_rgb_t background_color,
     int32_t w, 
@@ -208,27 +225,36 @@ sokol_offscreen_pass_t sokol_init_scene_pass(
     int32_t sample_count,
     sokol_offscreen_pass_t *depth_pass_out) 
 {
-    sg_image color_target = sokol_target_rgba16f("Scene color target", w, h, sample_count, 1);
-    sg_image depth_target = sokol_target_depth(w, h, sample_count);
-
     ecs_trace("sokol: initialize scene pass");
+    sokol_offscreen_pass_t pass;
+    ecs_os_zeromem(&pass);
+    update_scene_pass(&pass, w, h, sample_count);
 
-    sg_pass pass = sg_make_pass(&(sg_pass_desc){
-        .color_attachments[0].image = color_target,
-        .depth_stencil_attachment.image = depth_target
-    });
+    *depth_pass_out = sokol_init_depth_pass(w, h, 
+        pass.depth_target, sample_count);
 
-    *depth_pass_out = sokol_init_depth_pass(w, h, depth_target, sample_count);
+    pass.pass_action = sokol_clear_action(background_color, true, false);
+    pass.pip = init_scene_pipeline(sample_count);
+    pass.sample_count = sample_count;
 
     ecs_trace("sokol: initialize scene pipeline");
+    return pass;
+}
 
-    return (sokol_offscreen_pass_t){
-        .pass_action = sokol_clear_action(background_color, true, false),
-        .pass = pass,
-        .pip = init_scene_pipeline(sample_count),
-        .color_target = color_target,
-        .depth_target = depth_target
-    };   
+void sokol_update_scene_pass(
+    sokol_offscreen_pass_t *pass,
+    int32_t w,
+    int32_t h,
+    sokol_offscreen_pass_t *depth_pass)
+{
+    ecs_dbg_3("sokol: update scene pass");
+    sg_destroy_pass(pass->pass);
+    sg_destroy_image(pass->color_target);
+    sg_destroy_image(pass->depth_target);
+
+    update_scene_pass(pass, w, h, pass->sample_count);
+    sokol_update_depth_pass(depth_pass, w, h, 
+        pass->depth_target, pass->sample_count);
 }
 
 static

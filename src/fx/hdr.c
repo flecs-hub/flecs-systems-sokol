@@ -60,6 +60,8 @@ SokolFx sokol_init_hdr(
 
     SokolFx fx = {0};
     fx.name = "Hdr";
+    fx.width = width;
+    fx.height = height;
 
     int threshold = sokol_fx_add_pass(&fx, &(sokol_fx_pass_desc_t){
         .name = "threshold",
@@ -139,7 +141,7 @@ SokolFx sokol_init_hdr(
 
     sokol_fx_add_pass(&fx, &(sokol_fx_pass_desc_t){
         .name = "hdr",
-        .outputs = {{width, height}},
+        .outputs = {{ .global_size = true }},
         .shader = shd_hdr,
         .inputs = { "hdr", "bloom" },
         .params = { "exposure", "gamma" },

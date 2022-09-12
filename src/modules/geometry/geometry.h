@@ -69,15 +69,8 @@ void sokol_init_geometry(
     ecs_world_t *world,
     sokol_resources_t *resources);
 
-/* Module implementation */
-
-typedef struct FlecsSystemsSokolGeometry {
-    int dummy;
-} FlecsSystemsSokolGeometry;
-
+/* Module import function */
 void FlecsSystemsSokolGeometryImport(
     ecs_world_t *world);
-
-#define FlecsSystemsSokolGeometryImportHandles(handles)
 
 #endif

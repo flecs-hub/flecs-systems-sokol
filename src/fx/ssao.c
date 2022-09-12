@@ -5,7 +5,7 @@
 static
 const char *shd_ssao_header = 
     // Increase/decrease to trade quality for performance
-    "#define NUM_SAMPLES 10\n"
+    "#define NUM_SAMPLES 8\n"
     // The sample kernel uses a spiral pattern so most samples are concentrated
     // close to the center. 
     "#define NUM_RINGS 3\n"
@@ -148,18 +148,13 @@ SokolFx sokol_init_ssao(
 
     SokolFx fx = {0};
     fx.name = "AmbientOcclusion";
-
-    int ao_width = width, ao_height = height;
-
-    if (SOKOL_HIGH_DPI) {
-        ao_width /= 2.0;
-        ao_height /= 2.0;
-    }
+    fx.width = width;
+    fx.height = height;
 
     // Ambient occlusion shader 
     int32_t ao = sokol_fx_add_pass(&fx, &(sokol_fx_pass_desc_t){
         .name = "ssao",
-        .outputs = {{ao_width, ao_height}},
+        .outputs = {{ .global_size = true, .factor = 0.5 }},
         .shader_header = shd_ssao_header,
         .shader = shd_ssao,
         .color_format = SG_PIXELFORMAT_RGBA8,
@@ -174,7 +169,7 @@ SokolFx sokol_init_ssao(
     // Blur to reduce the noise, so we can keep sample count low
     int blur = sokol_fx_add_pass(&fx, &(sokol_fx_pass_desc_t){
         .name = "blur",
-        .outputs = {{512}},
+        .outputs = {{256}},
         .shader_header = shd_blur_hdr,
         .shader = shd_blur,
         .color_format = SG_PIXELFORMAT_RGBA8,
@@ -198,7 +193,7 @@ SokolFx sokol_init_ssao(
     // Multiply ambient occlusion with the scene
     sokol_fx_add_pass(&fx, &(sokol_fx_pass_desc_t){
         .name = "blend",
-        .outputs = {{width, height}},
+        .outputs = {{ .global_size = true }},
         .shader_header = shd_blend_mult_header,
         .shader = shd_blend_mult,
         .color_format = SG_PIXELFORMAT_RGBA16F,

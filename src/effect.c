@@ -84,6 +84,7 @@ int sokol_fx_add_pass(
     pass->sample_count = pass_desc->sample_count;
     pass->loop_count = 1;
     sg_pixel_format color_format = pass_desc->color_format;
+    pass->color_format = color_format;
 
     if (!color_format) {
         color_format = SG_PIXELFORMAT_RGBA8;
@@ -204,7 +205,8 @@ int sokol_fx_add_pass(
         }
 
         if (step->output >= SOKOL_MAX_FX_OUTPUTS || 
-            pass_desc->outputs[step->output].width == 0)
+            ((pass_desc->outputs[step->output].width == 0) &&
+                !pass_desc->outputs[step->output].global_size))
         {
             ecs_fatal("sokol: fx step '%s.%s.%s' has an invalid output",
                 fx->name, pass->name, step->name);
@@ -226,6 +228,12 @@ int sokol_fx_add_pass(
     /* Add outputs */
     for (int32_t i = 0; i < SOKOL_MAX_FX_OUTPUTS; i ++) {
         sokol_fx_output_desc_t *output = &pass_desc->outputs[i];
+        if (output->global_size) {
+            output->width = fx->width;
+            output->height = fx->height;
+            ecs_assert(output->width != 0, ECS_INVALID_PARAMETER, NULL);
+            ecs_assert(output->height != 0, ECS_INVALID_PARAMETER, NULL);
+        }
         if (!output->width) {
             break;
         }
@@ -234,13 +242,16 @@ int sokol_fx_add_pass(
         }
 
         pass->outputs[i].out[0] = sokol_target(fx->name, output->width, 
-            output->height, pass->sample_count, pass->mipmap_count, color_format);
+            output->height, pass->sample_count, pass->mipmap_count, 
+            color_format);
         pass->outputs[i].pass[0] = sg_make_pass(&(sg_pass_desc){
             .color_attachments[0].image = pass->outputs[i].out[0]
         });
 
         pass->outputs[i].width = output->width;
         pass->outputs[i].height = output->height;
+        pass->outputs[i].global_size = output->global_size;
+        pass->outputs[i].factor = output->factor;
 
         int32_t step_count = 0;
         for (int s = 0; s < pass->step_count; s ++) {
@@ -409,4 +420,45 @@ sg_image sokol_fx_run(
     }
 
     return fx->pass[fx->pass_count - 1].outputs[0].out[0];
+}
+
+void sokol_fx_update_size(
+    SokolFx *fx, 
+    int32_t width,
+    int32_t height)
+{
+    for (int p = 0; p < fx->pass_count; p ++) {
+        sokol_fx_pass_t *pass = &fx->pass[p];
+        for (int o = 0; o < pass->output_count; o ++) {
+            sokol_fx_output_t *output = &pass->outputs[o];
+            if (!output->global_size) {
+                continue;
+            }
+
+            output->width = width;
+            output->height = height;
+            if (output->factor) {
+                output->width *= output->factor;
+                output->height *= output->factor;
+            }
+
+            sg_destroy_pass(output->pass[0]);
+            sg_destroy_image(output->out[0]);
+            output->out[0] = sokol_target(fx->name, output->width, 
+                output->height, pass->sample_count, pass->mipmap_count, 
+                pass->color_format);
+            output->pass[0] = sg_make_pass(&(sg_pass_desc){
+                .color_attachments[0].image = output->out[0]});
+
+            if (output->step_count > 1) {
+                sg_destroy_pass(output->pass[1]);
+                sg_destroy_image(output->out[1]);
+                output->out[1] = sokol_target(fx->name, output->width, 
+                    output->height, pass->sample_count, pass->mipmap_count, 
+                    pass->color_format);
+                output->pass[1] = sg_make_pass(&(sg_pass_desc){
+                    .color_attachments[0].image = output->out[1]});
+            }
+        }
+    }
 }

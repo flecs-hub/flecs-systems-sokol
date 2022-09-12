@@ -130,7 +130,8 @@ sokol_offscreen_pass_t sokol_init_depth_pass(
 {
     ecs_trace("sokol: initialize depth pass");
 
-    sg_image color_target = sokol_target_rgba8("Depth color target", w, h, sample_count);
+    sg_image color_target = sokol_target_rgba8(
+        "Depth color target", w, h, sample_count);
     ecs_rgb_t background_color = {1, 1, 1};
 
     return (sokol_offscreen_pass_t){
@@ -143,6 +144,25 @@ sokol_offscreen_pass_t sokol_init_depth_pass(
         .color_target = color_target,
         .depth_target = depth_target
     };
+}
+
+void sokol_update_depth_pass(
+    sokol_offscreen_pass_t *pass,
+    int32_t w,
+    int32_t h,
+    sg_image depth_target,
+    int32_t sample_count)
+{
+    sg_destroy_image(pass->color_target);
+    sg_destroy_pass(pass->pass);
+
+    pass->color_target = sokol_target_rgba8(
+        "Depth color target", w, h, sample_count);
+
+    pass->pass = sg_make_pass(&(sg_pass_desc){
+        .color_attachments[0].image = pass->color_target,
+        .depth_stencil_attachment.image = depth_target
+    });
 }
 
 static

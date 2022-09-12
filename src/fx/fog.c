@@ -27,10 +27,12 @@ SokolFx sokol_init_fog(
 
     SokolFx fx = {0};
     fx.name = "Fog";
+    fx.width = width;
+    fx.height = height;
 
     sokol_fx_add_pass(&fx, &(sokol_fx_pass_desc_t){
         .name = "fog",
-        .outputs = {{width, height}},
+        .outputs = {{ .global_size = true }},
         .shader_header = shd_fog_header,
         .shader = shd_fog,
         .color_format = SG_PIXELFORMAT_RGBA16F,

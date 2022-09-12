@@ -13,12 +13,6 @@
 #define SOKOL_DEFAULT_DEPTH_NEAR (2.0)
 #define SOKOL_DEFAULT_DEPTH_FAR (2500.0)
 
-#ifndef __EMSCRIPTEN__
-#define SOKOL_HIGH_DPI true
-#else
-#define SOKOL_HIGH_DPI false
-#endif
-
 typedef struct SokolQuery {
     ecs_query_t *query;
 } SokolQuery;
@@ -91,6 +85,7 @@ typedef struct sokol_offscreen_pass_t {
     sg_pipeline pip;
     sg_image depth_target;
     sg_image color_target;
+    int32_t sample_count;
 } sokol_offscreen_pass_t;
 
 #include "resources.h"
@@ -117,6 +112,13 @@ sokol_offscreen_pass_t sokol_init_depth_pass(
     sg_image depth_target,
     int32_t sample_count);
 
+void sokol_update_depth_pass(
+    sokol_offscreen_pass_t *pass,
+    int32_t w,
+    int32_t h,
+    sg_image depth_target,
+    int32_t sample_count);
+
 void sokol_run_depth_pass(
     sokol_offscreen_pass_t *pass,
     sokol_render_state_t *state);
@@ -127,6 +129,12 @@ sokol_offscreen_pass_t sokol_init_scene_pass(
     int32_t w, 
     int32_t h,
     int32_t sample_count,
+    sokol_offscreen_pass_t *depth_pass_out);
+
+void sokol_update_scene_pass(
+    sokol_offscreen_pass_t *pass,
+    int32_t w,
+    int32_t h,
     sokol_offscreen_pass_t *depth_pass_out);
 
 /* Screen pass */

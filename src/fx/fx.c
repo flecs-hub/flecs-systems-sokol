@@ -9,3 +9,13 @@ sokol_fx_resources_t* sokol_init_fx(
     result->ssao = sokol_init_ssao(w, h);
     return result;
 }
+
+void sokol_update_fx(
+    sokol_fx_resources_t *fx, 
+    int width, 
+    int height)
+{
+    sokol_fx_update_size(&fx->hdr, width, height);
+    sokol_fx_update_size(&fx->fog, width, height);
+    sokol_fx_update_size(&fx->ssao, width, height);
+}
