@@ -5,12 +5,6 @@
 #include "../renderer/renderer.h"
 #include "../materials/materials.h"
 
-typedef enum sokol_buffer_draw_kind_t {
-    SokolDrawSolid = 1,
-    SokolDrawEmissive = 2,
-    SokolDrawTransparent = 4,
-} sokol_buffer_draw_kind_t;
-
 typedef void (*sokol_geometry_action_t)(
     ecs_iter_t *qit, 
     int32_t offset, 
@@ -46,7 +40,6 @@ typedef struct SokolGeometry {
     /* Instanced data per category */
     sokol_instances_t solid;
     sokol_instances_t emissive;
-    sokol_instances_t transparent;
 
     /* Function that copies geometry-specific data to GPU buffer */
     sokol_geometry_action_t populate;
@@ -54,11 +47,9 @@ typedef struct SokolGeometry {
 
 typedef struct SokolGeometryQuery {
     ecs_entity_t component;
-    bool static_geometry;
     ecs_query_t *parent_query;
     ecs_query_t *solid;
     ecs_query_t *emissive;
-    ecs_query_t *transparent;
 } SokolGeometryQuery;
 
 extern ECS_COMPONENT_DECLARE(SokolGeometry);

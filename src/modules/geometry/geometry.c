@@ -6,27 +6,25 @@ ECS_COMPONENT_DECLARE(SokolGeometryQuery);
 
 ECS_DECLARE(SokolRectangleGeometry);
 ECS_DECLARE(SokolBoxGeometry);
-ECS_DECLARE(SokolBoxStaticGeometry);
 
 ECS_CTOR(SokolGeometry, ptr, {
     *ptr = (SokolGeometry) {0};
 })
 
-static 
-void free_buffer(sokol_instances_t *b) {
+static
+void sokol_free_buffer(sokol_instances_t *b) {
     ecs_os_free(b->colors);
     ecs_os_free(b->transforms);
     ecs_os_free(b->materials);
 }
 
 ECS_DTOR(SokolGeometry, ptr, {
-    free_buffer(&ptr->solid);
-    free_buffer(&ptr->emissive);
-    free_buffer(&ptr->transparent);
+    sokol_free_buffer(&ptr->solid);
+    sokol_free_buffer(&ptr->emissive);
 })
 
 static
-void populate_rectangle(ecs_iter_t *qit, int32_t offset, mat4 *transforms) {
+void sokol_populate_rectangle(ecs_iter_t *qit, int32_t offset, mat4 *transforms) {
     EcsRectangle *r = ecs_field(qit, EcsRectangle, 2);
 
     int i;
@@ -44,7 +42,7 @@ void populate_rectangle(ecs_iter_t *qit, int32_t offset, mat4 *transforms) {
 }
 
 static
-void populate_box(ecs_iter_t *qit, int32_t offset, mat4 *transforms) {
+void sokol_populate_box(ecs_iter_t *qit, int32_t offset, mat4 *transforms) {
     EcsBox *b = ecs_field(qit, EcsBox, 2);
     
     int i;
@@ -62,7 +60,7 @@ void populate_box(ecs_iter_t *qit, int32_t offset, mat4 *transforms) {
 }
 
 static
-void init_rect(
+void sokol_init_rectangle(
     ecs_world_t *world,
     sokol_resources_t *resources) 
 {
@@ -74,11 +72,11 @@ void init_rect(
     g->normal_buffer = resources->rect_normals;
     g->index_buffer = resources->rect_indices;
     g->index_count = sokol_rectangle_index_count();
-    g->populate = populate_rectangle;
+    g->populate = sokol_populate_rectangle;
 }
 
 static
-void init_box(
+void sokol_init_box(
     ecs_world_t *world,
     sokol_resources_t *resources) 
 {
@@ -91,19 +89,7 @@ void init_box(
         g->normal_buffer = resources->box_normals;
         g->index_buffer = resources->box_indices;
         g->index_count = sokol_box_index_count();
-        g->populate = populate_box;
-    }
-
-    if (SokolBoxStaticGeometry) {
-        SokolGeometry *g = ecs_get_mut(
-            world, ecs_id(SokolBoxStaticGeometry), SokolGeometry);
-        ecs_assert(g != NULL, ECS_INTERNAL_ERROR, NULL);
-
-        g->vertex_buffer = resources->box;
-        g->normal_buffer = resources->box_normals;
-        g->index_buffer = resources->box_indices;
-        g->index_count = sokol_box_index_count();
-        g->populate = populate_box;
+        g->populate = sokol_populate_box;
     }
 }
 
@@ -111,151 +97,140 @@ void sokol_init_geometry(
     ecs_world_t *world,
     sokol_resources_t *resources) 
 {
-    init_rect(world, resources);
-    init_box(world, resources);
+    sokol_init_rectangle(world, resources);
+    sokol_init_box(world, resources);
 }
 
 static
-void populate_buffer(
+void sokol_populate_buffer(
     SokolGeometry *geometry,
     sokol_instances_t *instances,
     ecs_query_t *query)
 {
-    if (ecs_query_changed(query, 0)) {
-        const ecs_world_t *world = ecs_get_world(query);
+    /* Count number of instances to ensure GPU buffers are big enough */
+    int32_t count = 0;
+    const ecs_world_t *world = ecs_get_world(query);
+    ecs_iter_t qit = ecs_query_iter(world, query);
+    while (ecs_query_next(&qit)) {
+        count += qit.count;
+    }
+
+    if (!count) {
+        instances->instance_count = 0;
+    } else {
+        if (count == 1) {
+            /* Instanced pipelines can't work with single instance */
+            count ++;
+        }
+
+        /* Fetch materials buffer */
+        const SokolMaterials *render_materials = ecs_get(
+            world, SokolRendererInst, SokolMaterials);
+
+        /* Make sure application buffers are large enough */
+        ecs_rgba_t *colors = instances->colors;
+        mat4 *transforms = instances->transforms;
+        SokolMaterial *materials = instances->materials;
+
+        int colors_size = count * sizeof(ecs_rgba_t);
+        int transforms_size = count * sizeof(EcsTransform3);
+        int materials_size = count * sizeof(SokolMaterial);
+
+        int32_t instance_count = instances->instance_count;
+        int32_t instance_max = instances->instance_max;
+
+        if (instance_count < count) {
+            ecs_os_free(colors);
+            ecs_os_free(transforms);
+            ecs_os_free(materials);
+            colors = ecs_os_calloc(colors_size);
+            transforms = ecs_os_calloc(transforms_size);
+            materials = ecs_os_calloc(materials_size);
+        }
+
+        /* Copy data into application buffers */
+        int32_t cursor = 0;
+        int i;
+
         ecs_iter_t qit = ecs_query_iter(world, query);
-        bool changed = false;
-
-        /* Count number of instances to ensure GPU buffers are big enough */
-        int32_t count = 0;
         while (ecs_query_next(&qit)) {
-            count += qit.count;
-            if (ecs_query_changed(query, &qit)) {
-                changed = true;
+            EcsTransform3 *t = ecs_field(&qit, EcsTransform3, 1);
+            SokolMaterialId *mat = ecs_field(&qit, SokolMaterialId, 3);
+            EcsRgb *c = ecs_field(&qit, EcsRgb, 4);
+
+            if (ecs_field_is_self(&qit, 4)) {
+                for (i = 0; i < qit.count; i ++) {
+                    colors[cursor + i].r = c[i].r;
+                    colors[cursor + i].g = c[i].g;
+                    colors[cursor + i].b = c[i].b;
+                    colors[cursor + i].a = 0;
+                }
+            } else {
+                for (i = 0; i < qit.count; i ++) {
+                    colors[cursor + i].r = c->r;
+                    colors[cursor + i].g = c->g;
+                    colors[cursor + i].b = c->b;
+                    colors[cursor + i].a = 0;
+                }
             }
+
+            if (mat) {
+                uint16_t material_id = mat->material_id;
+                for (i = 0; i < qit.count; i ++) {
+                    materials[cursor + i] = 
+                        render_materials->array[material_id];
+                }
+            } else {
+                ecs_os_memset_n(&materials[cursor], 0, uint32_t, qit.count);
+            }
+
+            ecs_os_memcpy_n(&transforms[cursor], t, mat4, qit.count);
+
+            ecs_assert(geometry->populate != NULL, ECS_INTERNAL_ERROR, NULL);
+            geometry->populate(&qit, cursor, transforms);
+            cursor += qit.count;
         }
 
-        if (!changed) {
-            return;
+        instances->colors = colors;
+        instances->transforms = transforms;
+        instances->materials = materials;
+        instances->instance_count = count;
+
+        if (count > instance_max) {
+            if (instance_max) {                    
+                sg_destroy_buffer(instances->color_buffer);
+                sg_destroy_buffer(instances->transform_buffer);
+                sg_destroy_buffer(instances->material_buffer);
+            }
+
+            while (count > instance_max) {
+                if (!instance_max) {
+                    instance_max = 1;
+                }
+                instance_max *= 2;
+            }
+
+            instances->color_buffer = sg_make_buffer(&(sg_buffer_desc){
+                .size = instance_max * sizeof(ecs_rgba_t),
+                .usage = SG_USAGE_STREAM
+            });
+
+            instances->transform_buffer = sg_make_buffer(&(sg_buffer_desc){
+                .size = instance_max * sizeof(EcsTransform3),
+                .usage = SG_USAGE_STREAM
+            });
+
+            instances->material_buffer = sg_make_buffer(&(sg_buffer_desc){
+                .size = instance_max * sizeof(SokolMaterial),
+                .usage = SG_USAGE_STREAM
+            });
+
+            instances->instance_max = instance_max;
         }
 
-        if (!count) {
-            instances->instance_count = 0;
-        } else {
-            if (count == 1) {
-                /* Instanced pipelines can't work with single instance */
-                count ++;
-            }
-
-            /* Fetch materials buffer */
-            const SokolMaterials *render_materials = ecs_get(
-                world, SokolRendererInst, SokolMaterials);
-
-            /* Make sure application buffers are large enough */
-            ecs_rgba_t *colors = instances->colors;
-            mat4 *transforms = instances->transforms;
-            SokolMaterial *materials = instances->materials;
-
-            int colors_size = count * sizeof(ecs_rgba_t);
-            int transforms_size = count * sizeof(EcsTransform3);
-            int materials_size = count * sizeof(SokolMaterial);
-
-            int32_t instance_count = instances->instance_count;
-            int32_t instance_max = instances->instance_max;
-
-            if (instance_count < count) {
-                ecs_os_free(colors);
-                ecs_os_free(transforms);
-                ecs_os_free(materials);
-                colors = ecs_os_calloc(colors_size);
-                transforms = ecs_os_calloc(transforms_size);
-                materials = ecs_os_calloc(materials_size);
-            }
-
-            /* Copy data into application buffers */
-            int32_t cursor = 0;
-            int i;
-
-            ecs_iter_t qit = ecs_query_iter(world, query);
-            while (ecs_query_next(&qit)) {
-                EcsTransform3 *t = ecs_field(&qit, EcsTransform3, 1);
-                SokolMaterialId *mat = ecs_field(&qit, SokolMaterialId, 3);
-                EcsRgb *c = ecs_field(&qit, EcsRgb, 5);
-
-                if (ecs_field_is_self(&qit, 5)) {
-                    for (i = 0; i < qit.count; i ++) {
-                        colors[cursor + i].r = c[i].r;
-                        colors[cursor + i].g = c[i].g;
-                        colors[cursor + i].b = c[i].b;
-                        colors[cursor + i].a = 0;
-                    }
-                } else {
-                    for (i = 0; i < qit.count; i ++) {
-                        colors[cursor + i].r = c->r;
-                        colors[cursor + i].g = c->g;
-                        colors[cursor + i].b = c->b;
-                        colors[cursor + i].a = 0;
-                    }
-                }
-
-                if (mat) {
-                    uint16_t material_id = mat->material_id;
-                    for (i = 0; i < qit.count; i ++) {
-                        materials[cursor + i] = 
-                            render_materials->array[material_id];
-                    }
-                } else {
-                    memset(&materials[cursor], 0, qit.count * sizeof(uint32_t));
-                }
-
-                memcpy(&transforms[cursor], t, qit.count * sizeof(mat4));
-
-                ecs_assert(geometry->populate != NULL, ECS_INTERNAL_ERROR, NULL);
-                geometry->populate(&qit, cursor, transforms);
-                cursor += qit.count;
-            }
-
-            instances->colors = colors;
-            instances->transforms = transforms;
-            instances->materials = materials;
-            instances->instance_count = count;
-
-            if (count > instance_max) {
-                if (instance_max) {                    
-                    sg_destroy_buffer(instances->color_buffer);
-                    sg_destroy_buffer(instances->transform_buffer);
-                    sg_destroy_buffer(instances->material_buffer);
-                }
-
-                while (count > instance_max) {
-                    if (!instance_max) {
-                        instance_max = 1;
-                    }
-                    instance_max *= 2;
-                }
-
-                instances->color_buffer = sg_make_buffer(&(sg_buffer_desc){
-                    .size = instance_max * sizeof(ecs_rgba_t),
-                    .usage = SG_USAGE_STREAM
-                });
-
-                instances->transform_buffer = sg_make_buffer(&(sg_buffer_desc){
-                    .size = instance_max * sizeof(EcsTransform3),
-                    .usage = SG_USAGE_STREAM
-                });
-
-                instances->material_buffer = sg_make_buffer(&(sg_buffer_desc){
-                    .size = instance_max * sizeof(SokolMaterial),
-                    .usage = SG_USAGE_STREAM
-                });
-
-                instances->instance_max = instance_max;
-            }
-
-            sg_update_buffer(instances->color_buffer, &(sg_range){colors, colors_size});
-            sg_update_buffer(instances->transform_buffer, &(sg_range){transforms, transforms_size});
-            sg_update_buffer(instances->material_buffer, &(sg_range){materials, materials_size});
-        }
+        sg_update_buffer(instances->color_buffer, &(sg_range){colors, colors_size});
+        sg_update_buffer(instances->transform_buffer, &(sg_range){transforms, transforms_size});
+        sg_update_buffer(instances->material_buffer, &(sg_range){materials, materials_size});
     }
 }
 
@@ -268,9 +243,8 @@ void SokolPopulateGeometry(
 
     int i;
     for (i = 0; i < it->count; i ++) {
-        populate_buffer(&g[i], &g[i].solid, q[i].solid);
-        populate_buffer(&g[i], &g[i].emissive, q[i].emissive);
-        populate_buffer(&g[i], &g[i].transparent, q[i].transparent);
+        sokol_populate_buffer(&g[i], &g[i].solid, q[i].solid);
+        sokol_populate_buffer(&g[i], &g[i].emissive, q[i].emissive);
     }
 }
 
@@ -281,59 +255,37 @@ void CreateGeometryQueries(ecs_iter_t *it) {
 
     int i;
     for (i = 0; i < it->count; i ++) {
-        char *comp_path = ecs_get_fullpath(world, sb[i].component);
-        char expr[255], subexpr[512];
-        sprintf(expr, 
-            "[in] flecs.components.transform.Transform3,"
-            "[in] %s(self|up),"
-            "[in] ?flecs.systems.sokol.MaterialId(up)",
-                comp_path);
-        ecs_os_free(comp_path);
+        ecs_query_desc_t desc = {
+            .filter = {
+                .terms = {{
+                    .id        = ecs_id(EcsTransform3), 
+                    .inout     = EcsIn 
+                }, {
+                    .id        = sb[i].component, 
+                    .inout     = EcsIn 
+                }, {
+                    .id        = ecs_id(SokolMaterialId), 
+                    .oper      = EcsOptional,
+                    .inout     = EcsIn,
+                    .src.flags = EcsUp
+                }, {
+                    .id        = ecs_id(EcsRgb),
+                    .inout     = EcsIn
+                }, {
+                    .id        = ecs_id(EcsEmissive),
+                    .inout     = EcsIn,
+                    .oper      = EcsNot
+                }},
+                .instanced = true
+            }
+        };
 
-        if (sb[i].static_geometry) {
-            strcat(expr, ", flecs.components.geometry.StaticGeometry");
-        } else {
-            strcat(expr, ", !flecs.components.geometry.StaticGeometry");
-        }
+        /* Query for solid, non-emissive objects */
+        sb[i].solid = ecs_query_init(world, &desc);
 
-        sb[i].parent_query = ecs_query(world, {
-            .filter.expr = expr,
-            .filter.instanced = true
-        });
-
-        sprintf(subexpr, 
-            "%s,"
-            "[in] flecs.components.graphics.Rgb(self|up),"
-            "[in] !flecs.components.graphics.Emissive(up),"
-            "[in] !flecs.components.graphics.Rgba(self|up)", 
-                expr);
-        sb[i].solid = ecs_query(world, {
-            .filter.expr = subexpr,
-            .filter.instanced = true,
-            .parent = sb[i].parent_query,
-        });
-
-        sprintf(subexpr, 
-            "%s,"
-            "[in] flecs.components.graphics.Rgb(self|up),"
-            "[in] flecs.components.graphics.Emissive(up),"
-            "[in] !flecs.components.graphics.Rgba(self|up)", expr);
-        sb[i].emissive = ecs_query(world, {
-            .filter.expr = subexpr,
-            .filter.instanced = true,
-            .parent = sb[i].parent_query
-        });
-
-        sprintf(subexpr,
-            "%s,"
-            "[in] !flecs.components.graphics.Rgb(self|up),"
-            "[in] flecs.components.graphics.Emissive(self|up),"
-            "[in] flecs.components.graphics.Rgba(self|up)", expr);
-        sb[i].transparent = ecs_query(world, {
-            .filter.expr = subexpr,
-            .filter.instanced = true,
-            .parent = sb[i].parent_query
-        });
+        /* Query for solid, emissive objects */
+        desc.filter.terms[4].oper = 0; /* Remove Not operator */
+        sb[i].emissive = ecs_query_init(world, &desc);
     }
 }
 
@@ -360,7 +312,7 @@ void FlecsSystemsSokolGeometryImport(
 
     ecs_set_scope(world, module);
 
-    /* Create queries for solid, emissive and transparent */
+    /* Create queries for solid and emissive */
     ECS_OBSERVER(world, CreateGeometryQueries, EcsOnSet, GeometryQuery);
 
     /* Support for rectangle primitive */
@@ -372,14 +324,7 @@ void FlecsSystemsSokolGeometryImport(
     /* Support for box primitive */
     ECS_ENTITY_DEFINE(world, SokolBoxGeometry, Geometry);
         ecs_set(world, SokolBoxGeometry, SokolGeometryQuery, {
-            .component = ecs_id(EcsBox),
-            .static_geometry = false
-        });
-
-    ECS_ENTITY_DEFINE(world, SokolBoxStaticGeometry, Geometry);
-        ecs_set(world, SokolBoxStaticGeometry, SokolGeometryQuery, {
-            .component = ecs_id(EcsBox),
-            .static_geometry = true
+            .component = ecs_id(EcsBox)
         });
 
     /* Create system that manages buffers */
