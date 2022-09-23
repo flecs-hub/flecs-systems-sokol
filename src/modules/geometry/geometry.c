@@ -7,6 +7,7 @@ ECS_COMPONENT_DECLARE(SokolGeometryQuery);
 ECS_DECLARE(SokolRectangleGeometry);
 ECS_DECLARE(SokolBoxGeometry);
 
+// Holds a linked list of buffers for geometry (box, rectangle)
 static
 sokol_geometry_buffers_t* sokol_create_buffers(void) {
     sokol_geometry_buffers_t *result = ecs_os_calloc_t(sokol_geometry_buffers_t);
@@ -15,6 +16,11 @@ sokol_geometry_buffers_t* sokol_create_buffers(void) {
     return result;
 }
 
+// The buffer type holds buffers managed by sokol that contain GPU data. A 
+// buffer instance is created for each world cell.
+//
+// A buffer contains a linked list of groups that belong to the world cell.
+// Groups hold all instances of a prefab in a specific world cell.
 static
 sokol_geometry_buffer_t* sokol_create_buffer(
     ecs_world_t *world,
@@ -52,6 +58,8 @@ void sokol_delete_buffer(
     ecs_assert(buffer == ecs_map_get_ptr(&buffers->index, 
         sokol_geometry_buffer_t*, buffer->id), 
             ECS_INTERNAL_ERROR, NULL);
+
+    // Groups must have been cleaned up before buffer instance is deleted
     ecs_assert(buffer->groups == NULL, ECS_INTERNAL_ERROR, NULL);
 
     sokol_geometry_buffer_t *prev = buffer->prev, *next = buffer->next;
@@ -100,6 +108,8 @@ int32_t next_pow_of_2(
     return n;
 }
 
+// To ensure rectangles are of the right size, use the Rectangle component to
+// apply a scaling factor to the transform matrix that is sent to the GPU.
 static
 void sokol_populate_rectangle(
     mat4 *transforms, 
@@ -121,6 +131,8 @@ void sokol_populate_rectangle(
     }
 }
 
+// To ensure boxes are of the right size, use the Box component to apply
+// a scaling factor to the transform matrix that is sent to the GPU.
 static
 void sokol_populate_box(
     mat4 *transforms, 
@@ -143,6 +155,7 @@ void sokol_populate_box(
     }
 }
 
+// Init static rectangle geometry data (vertices, indices)
 static
 void sokol_init_rectangle(
     ecs_world_t *world,
@@ -159,6 +172,7 @@ void sokol_init_rectangle(
     g->populate = (sokol_geometry_action_t)sokol_populate_rectangle;
 }
 
+// Init static box geometry data (vertices, indices)
 static
 void sokol_init_box(
     ecs_world_t *world,
@@ -185,7 +199,7 @@ void sokol_init_geometry(
     sokol_init_box(world, resources);
 }
 
-// ecs_vec_t functions are not public
+// Clear list of group ids that got changed in this frame
 static
 void sokol_groups_clear(
     ecs_vec_t *vec)
@@ -193,6 +207,7 @@ void sokol_groups_clear(
     vec->count = 0;
 }
 
+// Add new element to changed group list.
 static
 uint64_t* sokol_groups_add(
     ecs_vec_t *vec)
@@ -207,6 +222,14 @@ uint64_t* sokol_groups_add(
     return result;
 }
 
+// Add a page to a group. A page is a fixed size application buffer that data 
+// from ECS tables is copied into. Groups/pages are only updated when ECS data
+// changes.
+// By storing a copy of the data outside of the ECS the renderer can quickly
+// enable/disable groups depending on visibility without having to iterate
+// (potentially many) tables.
+// Having a copy of the data also makes it easier in the future to multithread
+// the render code.
 static
 sokol_geometry_page_t* sokol_group_add_page(
     sokol_geometry_group_t *group)
@@ -240,17 +263,15 @@ int64_t sokol_sqr(int64_t v) {
 }
 
 static
-int8_t sokol_cond_sign(int8_t cond) {
-    return 1 - 2 * cond;
-}
-
-static
 int64_t sokol_abs(int64_t v) {
     static const int SOKOL_CHAR_BIT = 8;
     int64_t mask = v >> (sizeof(int64_t) * SOKOL_CHAR_BIT - 1);
     return (v + mask) ^ mask;
 }
 
+// Iterate a query group, check if it contains any chagned tables. If at least
+// one table has changed, add the group to the changed list. This list will be
+// used later on to populate the GPU buffers.
 static
 void sokol_group_add_changed(
     const ecs_world_t *world,
@@ -271,6 +292,7 @@ void sokol_group_add_changed(
     }
 }
 
+// Append all groups in a buffer with changed data to the changed group list
 static
 void sokol_groups_add_changed(
     const ecs_world_t *world,
@@ -286,6 +308,7 @@ void sokol_groups_add_changed(
     }
 }
 
+// Determine visibility for all groups in a buffer.
 static
 void sokol_update_visibility(
     const ecs_world_t *world,
@@ -294,6 +317,7 @@ void sokol_update_visibility(
     ecs_query_t *query,
     ecs_vec_t *group_ids)
 {
+    // First find the world cell metadata associated with this buffer.
     const EcsWorldCellCoord *cell = NULL;
     if (buffer->cell_coord.entity) {
         cell = ecs_ref_get(world, &buffer->cell_coord, EcsWorldCellCoord);
@@ -305,6 +329,8 @@ void sokol_update_visibility(
         return;
     }
 
+    // Compute distance from camera to the center of the world cell. This is
+    // used to do broad phase elimination of groups, not individual entities.
     int64_t view_x = view_pos->x;
     int64_t view_z = view_pos->z;
     int64_t cell_x = cell->x;
@@ -322,10 +348,11 @@ void sokol_update_visibility(
     dy *= (dy > 0);
     int64_t d_sqr = sokol_sqr(dx) + sokol_sqr(dy) + sokol_sqr(dz);
 
+    // Iterate groups in buffer, find the ones for which visibility changed.
     sokol_geometry_group_t *group = buffer->groups;
     while (group) {
-        if (!group->draw_distance.id) {
-            // Group has no view distance / world cell
+        if (!group->draw_distance.entity) {
+            // Group has no draw distance specified, always draw.
             ecs_assert(group->visible == true, ECS_INTERNAL_ERROR, NULL);
             sokol_group_add_changed(world, query, group_ids, group->id);
             group = group->next;
@@ -335,22 +362,33 @@ void sokol_update_visibility(
         const EcsDrawDistance *vd = ecs_ref_get(world, &group->draw_distance, 
             EcsDrawDistance);
         if (!vd) {
-            // Shouldn't happen, but don't crash
+            // This should never happen, but don't crash.
             ecs_assert(group->visible == true, ECS_INTERNAL_ERROR, NULL);
             sokol_group_add_changed(world, query, group_ids, group->id);
             group = group->next;
             continue;
         }
 
-        // Test if visibility of group has changed
+        // Test if visibility of group has changed.
         float draw_distance_sqr = sokol_sqr(vd->far_);
         bool visible = d_sqr < draw_distance_sqr;
         bool changed = visible != group->visible;
         int32_t count = group->count;
+
+        // If visibility of a group has changed (either it became visible or
+        // invisible) flag that the buffers for this world cell need to be
+        // repopulated.
         buffer->changed |= changed;
+
+        // If visibility changed, update the instance count for the buffer. This
+        // is kept up to date so that the code that populates the buffers knows
+        // in advance whether the sokol/GPU buffers need to be resized.
         buffer->count += changed * (visible * count - !visible * count);
         group->visible = visible;
         if (visible) {
+            // Only check if the group has changed data if it's visible. This
+            // lets us have large dynamic scenes, while only updating GPU data
+            // with entities that changed *and* are visible.
             sokol_group_add_changed(world, query, group_ids, group->id);
         }
 
@@ -358,6 +396,9 @@ void sokol_update_visibility(
     }
 }
 
+// A group contains instances for a prefab in a specific world cell. This
+// function is called if a change was detected for the data (tables) contained
+// by the group.
 static
 void sokol_update_group(
     const ecs_world_t *world,
@@ -366,8 +407,11 @@ void sokol_update_group(
     ecs_query_t *query,
     uint64_t group_id)
 {
+    // Get the group context from the query. This context is created by the
+    // sokol_on_group_create function.
     sokol_geometry_group_t *group = ecs_query_get_group_ctx(query, group_id);
     if (!group->visible) {
+        // Ignore if the group is not visible.
         return;
     }
 
@@ -375,19 +419,25 @@ void sokol_update_group(
     ecs_assert(buffer != NULL, ECS_INTERNAL_ERROR, NULL);
     sokol_geometry_page_t *page = group->first_page;
     if (!page) {
+        // If the group didn't contain any pages, create one
         page = sokol_group_add_page(group);
     } else {
+        // If the group does contain pages clear the content
         page->count = 0;
     }
 
-    // Subtract old group count from buffer (update later with new count)
+    // To keep the instance count in the buffer in sync, first remove the old
+    // instance count of the group from the buffer. Once we know how many 
+    // entities are in the group after the changes, the new group count will be
+    // added to the buffer again.
     buffer->count -= group->count;
     group->count = 0;
 
-    // Copy component data to group cache
+    // Iterate all tables for this group
     ecs_iter_t qit = ecs_query_iter(world, query);
     ecs_query_set_group(&qit, group_id);
     while (ecs_query_next(&qit)) {
+        // Copy component data to group pages
         EcsTransform3 *transforms = ecs_field(&qit, EcsTransform3, 1);
         EcsRgb *colors = ecs_field(&qit, EcsRgb, 2);
         SokolMaterialId *materials = ecs_field(&qit, SokolMaterialId, 3);
@@ -401,10 +451,13 @@ void sokol_update_group(
         do {
             int32_t space_left = sokol_page_space_left(page);
             if (!space_left) {
+                // Reuse existing pages if they exist
                 page = page->next;
                 if (!page) {
+                    // New page needs to be allocated
                     page = sokol_group_add_page(group);
                 } else {
+                    // Reset contents of existing page
                     page->count = 0;
                 }
                 space_left = SOKOL_GEOMETRY_PAGE_SIZE;
@@ -422,6 +475,7 @@ void sokol_update_group(
                 ecs_os_memcpy_n(&page->colors[pstart], colors, ecs_rgb_t, to_copy);
                 colors += to_copy;
             } else {
+                // Shared color component, copy shared value to all elements
                 for (i = 0; i < to_copy; i ++) {
                     page->colors[pstart + i] = *colors;
                 }
@@ -438,13 +492,17 @@ void sokol_update_group(
             if (materials) {
                 uint64_t material_id = materials->value;
                 for (i = 0; i < to_copy; i ++) {
+                    // Fetch material data from material array. We can't pass 
+                    // the material index/array to the shader as this is not
+                    // supported by WebGL.
                     page->materials[pstart + i] = material_data[material_id];
                 }
             } else {
-                ecs_os_memset_n(&page->materials[pstart], 0, SokolMaterial, to_copy);
+                ecs_os_memset_n(&page->materials[pstart], 0, 
+                    SokolMaterial, to_copy);
             }
 
-            // Apply scaling to transform matrix
+            // Apply geometry-specific scaling to transform matrix
             geometry->populate(&page->transforms[pstart], geometry_data, 
                 to_copy, geometry_self);
             geometry_data = ECS_OFFSET(geometry_data, geometry_size * to_copy);
@@ -457,7 +515,9 @@ void sokol_update_group(
     // TODO: instanced draw calls can't work with single instances
     if (group->count == 1) { }
 
-    // Store first page that doesn't contain data for current frame
+    // Store first page that doesn't contain data for current frame. This way
+    // we can reuse pages that are not used this frame, while letting the
+    // buffer code know where to stop iterating the group.
     group->first_no_data = page->next;
 
     // Add group count to buffer
@@ -467,12 +527,16 @@ void sokol_update_group(
     buffer->changed = true;
 }
 
+// Update buffer data. A buffer holds all the data for a world cell.
 static
 void sokol_update_buffer(
     const ecs_world_t *world,
     sokol_geometry_buffer_t *buffer)
 {
     if (!buffer->changed) {
+        // Only update buffer data if one of the buffer groups had a change,
+        // either because its visiblity changed or it was visible and its
+        // data changed.
         return;
     }
 
@@ -510,6 +574,7 @@ void sokol_update_buffer(
         sokol_geometry_page_t *page = group->first_page;
         int32_t group_count = 0;
 
+        // Iterate until the last page with data for this frame was found
         while (page != end) {
             int32_t count = page->count;
 
@@ -524,6 +589,7 @@ void sokol_update_buffer(
             page = page->next;
         }
 
+        // Sanity check to make sure groups correctly updated their count
         if (group_count != group->count) {
             char *str = ecs_id_str(world, group->id);
             ecs_err("group %s reports incorrect number of instances (%d vs %d)",
@@ -535,6 +601,7 @@ void sokol_update_buffer(
         group = group->next;
     }
 
+    // Sanity check to make sure groups correctly updated the buffer count
     if (buffer_count != buffer->count) {
         char *str = ecs_get_fullpath(world, buffer->id);
         ecs_err("buffer %s reports incorrect number of instances (%d vs %d)", 
@@ -543,6 +610,34 @@ void sokol_update_buffer(
     }
 }
 
+// Main function that populates GPU buffers with ECS data. Each set of geometry
+// data is described by an ECS query. Because iterating all matching tables in
+// the query could be too expensive for large scenes, this code uses a few
+// techniques that reduces the number of tables to iterate by a lot.
+//
+// The query uses the group_by feature to organize matched tables into different
+// groups. A group is identified by a unique 64bit id. The group_by function for
+// the geometry query combines the world cell and (optional) prefab id (see the
+// sokol_group_by function for more details).
+//
+// The code registers callbacks with the query that are invoked when groups are
+// created and deleted to build up a data structure that stores a list of query
+// groups, grouped by world cell (sokol_geometry_buffer_t).
+//
+// This function first iterates the world cells to find the ones that contain
+// visible groups. Visibility is determined by an optional DrawDistance 
+// component on a prefab. This means that world cells can contain groups with
+// different draw distances, which is useful when rendering both large and
+// small entities.
+//
+// When group visibility changes, the buffer (world cell) is marked as dirty.
+// For each visible group the code will check if it contains changed data 
+// (position, rotation, scale, color) with the query change tracking feature.
+// If data did change, the buffer (world cell) is marked dirty.
+//
+// The code then iterates all dirty world cells, and rebuild the GPU buffer 
+// data. This is a fast process as the data is already stored in a list of 
+// contiguous buffers (pages) for each group.
 static
 void sokol_populate_buffers(
     SokolGeometry *geometry,
@@ -587,6 +682,8 @@ void sokol_populate_buffers(
     }
 }
 
+// System that matches all geometry kinds & calls the function to update GPU
+// buffers with ECS data.
 static
 void SokolPopulateGeometry(
     ecs_iter_t *it) 
@@ -608,11 +705,14 @@ void SokolPopulateGeometry(
 
     int i;
     for (i = 0; i < it->count; i ++) {
+        // Solid and emissive objects are split up, so we can treat emissive
+        // objects differently, for example when doing shadow mapping.
         sokol_populate_buffers(&g[i], g[i].solid, q[i].solid, view_pos);
         sokol_populate_buffers(&g[i], g[i].emissive, q[i].emissive, view_pos);
     }
 }
 
+// Callback that's invoked when a new group is created in the query.
 static
 void* sokol_on_group_create(
     ecs_world_t *world,
@@ -622,6 +722,8 @@ void* sokol_on_group_create(
     sokol_geometry_buffers_t *buffers = group_by_ctx;
     ecs_entity_t buffer_id = ECS_PAIR_FIRST(group_id); // world cell
     ecs_entity_t prefab = ECS_PAIR_SECOND(group_id);
+
+    // Find or create a buffer for the world cell.
     sokol_geometry_buffer_t *buffer = sokol_create_buffer(
         world, buffers, buffer_id);
 
@@ -629,6 +731,7 @@ void* sokol_on_group_create(
     result->buffer = buffer;
     result->id = group_id;
 
+    // Add the group to the linked list of groups for the world cell.
     sokol_geometry_group_t *next = buffer->groups;
     buffer->groups = result;
     result->next = next;
@@ -636,6 +739,10 @@ void* sokol_on_group_create(
         next->prev = result;
     }
 
+    // If the group contains prefab instances, check if the prefab has a
+    // DrawDistance component. If it does, it will be used to determine group
+    // visibility based on camera distance. If the prefab/group does not have
+    // a DrawDistance component it is always visible.
     if (prefab) {
         prefab = ecs_get_alive(world, prefab);
         result->draw_distance = ecs_ref_init(world, prefab, EcsDrawDistance);
@@ -646,6 +753,7 @@ void* sokol_on_group_create(
     return result;
 }
 
+// Callback that's invoked when a group is deleted by a query.
 static
 void sokol_on_group_delete(
     ecs_world_t *world,
@@ -675,6 +783,7 @@ void sokol_on_group_delete(
         }
     }
 
+    // Cleanup pages
     sokol_geometry_page_t *next_page, *page = group->first_page;
     while (page != NULL) {
         next_page = page->next;
@@ -746,6 +855,8 @@ void CreateGeometryQueries(ecs_iter_t *it) {
 
     int i;
     for (i = 0; i < it->count; i ++) {
+        // Geometry query that includes all components that are copied (or used
+        // to find data to copy) to GPU buffers.
         ecs_query_desc_t desc = {
             .filter = {
                 .terms = {{
