@@ -106,21 +106,27 @@ sokol_offscreen_pass_t sokol_init_shadow_pass(
 static
 void shadow_draw_instances(
     SokolGeometry *geometry,
-    sokol_instances_t *instances)
+    sokol_geometry_buffers_t *buffers)
 {
-    if (!instances->instance_count) {
-        return;
-    }
+    sokol_geometry_buffer_t *buffer = buffers->first;
+    if (buffer) {
+        do {
+            if (!buffer->count) {
+                continue;
+            }
 
-    sg_bindings bind = {
-        .vertex_buffers = {
-            [0] = geometry->vertex_buffer,
-            [1] = instances->transform_buffer
-        },
-        .index_buffer = geometry->index_buffer
-    };
-    sg_apply_bindings(&bind);
-    sg_draw(0, geometry->index_count, instances->instance_count);    
+            sg_bindings bind = {
+                .vertex_buffers = {
+                    [0] = geometry->vertices,
+                    [1] = buffer->transforms
+                },
+                .index_buffer = geometry->indices
+            };
+
+            sg_apply_bindings(&bind);
+            sg_draw(0, geometry->index_count, buffer->count);
+        } while ((buffer = buffer->next));
+    }
 }
 
 void sokol_run_shadow_pass(
@@ -145,9 +151,9 @@ void sokol_run_shadow_pass(
         int b;
         for (b = 0; b < qit.count; b ++) {
             /* Only draw solids, ignore emissive and transparent (for now) */
-            shadow_draw_instances(&geometry[b], &geometry[b].solid);
+            shadow_draw_instances(&geometry[b], geometry[b].solid);
         }
     }
 
-    sg_end_pass();   
+    sg_end_pass();
 }

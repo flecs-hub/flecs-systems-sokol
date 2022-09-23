@@ -26,13 +26,13 @@ void SokolInitMaterials(ecs_iter_t *it) {
         int i;
         if (spec) {
             for (i = 0; i < qit.count; i ++) {
-                uint16_t id = mat[i].material_id;
+                uint16_t id = mat[i].value;
                 materials->array[id].specular_power = spec[i].specular_power;
                 materials->array[id].shininess = spec[i].shininess;
             }
         } else {
             for (i = 0; i < qit.count; i ++) {
-                uint16_t id = mat[i].material_id;
+                uint16_t id = mat[i].value;
                 materials->array[id].specular_power = 0;
                 materials->array[id].shininess = 1.0;
             }            
@@ -40,12 +40,12 @@ void SokolInitMaterials(ecs_iter_t *it) {
 
         if (em) {
             for (i = 0; i < qit.count; i ++) {
-                uint16_t id = mat[i].material_id;
+                uint16_t id = mat[i].value;
                 materials->array[id].emissive = em[i].value;
             }
         } else {
             for (i = 0; i < qit.count; i ++) {
-                uint16_t id = mat[i].material_id;
+                uint16_t id = mat[i].value;
                 materials->array[id].emissive = 0;
             }
         }

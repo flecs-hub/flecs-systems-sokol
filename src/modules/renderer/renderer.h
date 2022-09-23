@@ -17,6 +17,7 @@ typedef struct SokolRenderer {
     sokol_fx_resources_t *fx;
 
     ecs_entity_t canvas;
+    ecs_entity_t camera;
 } SokolRenderer;
 
 extern ECS_COMPONENT_DECLARE(SokolRenderer);

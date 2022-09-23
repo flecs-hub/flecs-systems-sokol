@@ -4,7 +4,7 @@ ECS_COMPONENT_DECLARE(SokolRenderer);
 
 /* Static geometry/texture resources */
 static
-sokol_resources_t init_resources(void) {
+sokol_resources_t sokol_init_resources(void) {
     return (sokol_resources_t){
         .quad = sokol_buffer_quad(),
 
@@ -22,7 +22,7 @@ sokol_resources_t init_resources(void) {
 
 /* Light matrix (used for shadow map calculation) */
 static
-void init_light_mat_vp(
+void sokol_init_light_mat_vp(
     sokol_render_state_t *state)
 {
     mat4 mat_p;
@@ -53,7 +53,7 @@ void init_light_mat_vp(
 
 /* Compute uniform values for camera & light that are used across shaders */
 static
-void init_global_uniforms(
+void sokol_init_global_uniforms(
     sokol_render_state_t *state)
 {
     /* Default camera parameters */
@@ -161,6 +161,7 @@ void SokolRender(ecs_iter_t *it) {
     /* Load active camera & light data from canvas */
     if (canvas->camera) {
         state.camera = ecs_get(world, canvas->camera, EcsCamera);
+        r->camera = canvas->camera;
     }
 
     state.ambient_light = canvas->ambient_light;
@@ -168,7 +169,7 @@ void SokolRender(ecs_iter_t *it) {
     if (canvas->directional_light) {
         state.light = ecs_get(world, canvas->directional_light, 
             EcsDirectionalLight);
-        init_light_mat_vp(&state);
+        sokol_init_light_mat_vp(&state);
         sokol_run_shadow_pass(&r->shadow_pass, &state);  
     } else {
         /* Set default ambient light if nothing is configured */
@@ -180,7 +181,7 @@ void SokolRender(ecs_iter_t *it) {
     }
 
     /* Compute uniforms that are shared between passes */
-    init_global_uniforms(&state);
+    sokol_init_global_uniforms(&state);
 
     /* Depth prepass for more efficient drawing */
     sokol_run_depth_pass(&r->depth_pass, &state);
@@ -229,13 +230,14 @@ void SokolInitRenderer(ecs_iter_t *it) {
     int h = sapp_height();
 
     sg_setup(&(sg_desc) {
-        .context.depth_format = SG_PIXELFORMAT_NONE
+        .context.depth_format = SG_PIXELFORMAT_NONE,
+        .buffer_pool_size = 16384
     });
 
     assert(sg_isvalid());
     ecs_trace("sokol: library initialized");
 
-    sokol_resources_t resources = init_resources();
+    sokol_resources_t resources = sokol_init_resources();
     sokol_offscreen_pass_t depth_pass;
     sokol_offscreen_pass_t scene_pass = sokol_init_scene_pass(
         canvas->background_color, w, h, 1, &depth_pass);

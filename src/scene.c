@@ -63,7 +63,7 @@ sg_pipeline init_scene_pipeline(int32_t sample_count) {
             "uniform mat4 u_light_vp;\n"
             LAYOUT(POSITION_I)  "in vec3 v_position;\n"
             LAYOUT(NORMAL_I)    "in vec3 v_normal;\n"
-            LAYOUT(COLOR_I)     "in vec4 i_color;\n"
+            LAYOUT(COLOR_I)     "in vec3 i_color;\n"
             LAYOUT(MATERIAL_I)  "in vec3 i_material;\n"
             LAYOUT(TRANSFORM_I) "in mat4 i_mat_m;\n"
             "out vec4 position;\n"
@@ -77,7 +77,7 @@ sg_pipeline init_scene_pipeline(int32_t sample_count) {
             "  light_position = u_light_vp * i_mat_m * pos4;\n"
             "  position = (i_mat_m * pos4);\n"
             "  normal = (i_mat_m * vec4(v_normal, 0.0)).xyz;\n"
-            "  color = i_color;\n"
+            "  color = vec4(i_color, 0.0);\n"
             "  material = i_material;\n"
             "}\n",
 
@@ -161,7 +161,7 @@ sg_pipeline init_scene_pipeline(int32_t sample_count) {
         .index_type = SG_INDEXTYPE_UINT16,
         .layout = {
             .buffers = {
-                [COLOR_I] =     { .stride = 16, .step_func=SG_VERTEXSTEP_PER_INSTANCE },
+                [COLOR_I] =     { .stride = 12, .step_func=SG_VERTEXSTEP_PER_INSTANCE },
                 [MATERIAL_I] =  { .stride = 12, .step_func=SG_VERTEXSTEP_PER_INSTANCE },
                 [TRANSFORM_I] = { .stride = 64, .step_func=SG_VERTEXSTEP_PER_INSTANCE }
             },
@@ -172,7 +172,7 @@ sg_pipeline init_scene_pipeline(int32_t sample_count) {
                 [NORMAL_I] =        { .buffer_index=NORMAL_I, .offset=0,  .format=SG_VERTEXFORMAT_FLOAT3 },
 
                 /* Color buffer (per instance) */
-                [COLOR_I] =         { .buffer_index=COLOR_I, .offset=0, .format=SG_VERTEXFORMAT_FLOAT4 },
+                [COLOR_I] =         { .buffer_index=COLOR_I, .offset=0, .format=SG_VERTEXFORMAT_FLOAT3 },
 
                 /* Material buffer (per instance) */
                 [MATERIAL_I] =      { .buffer_index=MATERIAL_I, .offset=0, .format=SG_VERTEXFORMAT_FLOAT3 },
@@ -260,27 +260,34 @@ void sokol_update_scene_pass(
 static
 void scene_draw_instances(
     SokolGeometry *geometry,
-    sokol_instances_t *instances,
+    sokol_geometry_buffers_t *buffers,
     sg_image shadow_map)
 {
-    if (!instances->instance_count) {
-        return;
+    sokol_geometry_buffer_t *buffer = buffers->first;
+    int32_t index_count = geometry->index_count;
+    if (buffer) {
+        do {
+            int32_t count = buffer->count;
+            if (!count) {
+                continue;
+            }
+
+            sg_bindings bind = {
+                .vertex_buffers = {
+                    [POSITION_I] =  geometry->vertices,
+                    [NORMAL_I] =    geometry->normals,
+                    [COLOR_I] =     buffer->colors,
+                    [MATERIAL_I] =  buffer->materials,
+                    [TRANSFORM_I] = buffer->transforms
+                },
+                .index_buffer = geometry->indices,
+                .fs_images[0] = shadow_map
+            };
+
+            sg_apply_bindings(&bind);
+            sg_draw(0, index_count, count);
+        } while ((buffer = buffer->next));
     }
-
-    sg_bindings bind = {
-        .vertex_buffers = {
-            [POSITION_I] =  geometry->vertex_buffer,
-            [NORMAL_I] =    geometry->normal_buffer,
-            [COLOR_I] =     instances->color_buffer,
-            [MATERIAL_I] =  instances->material_buffer,
-            [TRANSFORM_I] = instances->transform_buffer
-        },
-        .index_buffer = geometry->index_buffer,
-        .fs_images[0] = shadow_map
-    };
-
-    sg_apply_bindings(&bind);
-    sg_draw(0, geometry->index_count, instances->instance_count);
 }
 
 void sokol_run_scene_pass(
@@ -313,8 +320,8 @@ void sokol_run_scene_pass(
 
         int b;
         for (b = 0; b < qit.count; b ++) {
-            scene_draw_instances(&geometry[b], &geometry[b].solid, state->shadow_map);
-            scene_draw_instances(&geometry[b], &geometry[b].emissive, state->shadow_map);
+            scene_draw_instances(&geometry[b], geometry[b].solid, state->shadow_map);
+            scene_draw_instances(&geometry[b], geometry[b].emissive, state->shadow_map);
         }
     }
     sg_end_pass();

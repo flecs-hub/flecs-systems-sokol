@@ -6,43 +6,109 @@
 #include "../materials/materials.h"
 
 typedef void (*sokol_geometry_action_t)(
-    ecs_iter_t *qit, 
-    int32_t offset, 
-    mat4 *transforms);
+    mat4 *transforms,
+    void *data,
+    int32_t count,
+    bool self);
 
-typedef struct sokol_instances_t {
-    /* Instanced GPU buffers */
-    sg_buffer color_buffer;
-    sg_buffer transform_buffer;
-    sg_buffer material_buffer;
+#define SOKOL_GEOMETRY_PAGE_SIZE (65536)
 
-    /* Application-cached buffers */
-    ecs_rgba_t *colors;
+typedef struct sokol_geometry_page_t {
+    /* Buffers with instanced data */
+    ecs_rgb_t *colors;
     mat4 *transforms;
     SokolMaterial *materials;
 
-    /* Number of instances */
-    int32_t instance_count;
+    /* Number of instances in page */
+    int32_t count;
 
-    /* Max number of instances allowed in current buffer */
-    int32_t instance_max;
- } sokol_instances_t;
+    /* Next page */
+    struct sokol_geometry_page_t *next;
+} sokol_geometry_page_t;
+
+struct sokol_geometry_buffer_t;
+
+/* A group stores geometry data for a (world_cell, prefab) combination. Groups
+ * are only updated when their data has changed. If an entity is not an instance
+ * of a prefab, or does not have a world cell, 0 is used as placeholder. */
+typedef struct sokol_geometry_group_t {
+    /* Pages with instanced data */
+    sokol_geometry_page_t *first_page;
+    sokol_geometry_page_t *last_page;
+    sokol_geometry_page_t *first_no_data;
+
+    /* Prev/next group for buffers */
+    struct sokol_geometry_group_t *prev, *next;
+
+    /* Backref to buffer that group is part of */
+    struct sokol_geometry_buffer_t *buffer;
+
+    /* ref<DrawDistance> to determine if group contents are visible */
+    ecs_ref_t draw_distance;
+
+    /* Number of instances in the group */
+    int32_t count;
+
+    /* Is group visible */
+    bool visible;
+
+    /* Group id */
+    uint64_t id;
+} sokol_geometry_group_t;
+
+/* Buffers are maintained per world cell. Multiple groups can be stored in one
+ * set of buffers if a cell contains entities of different kinds of prefabs. */
+typedef struct sokol_geometry_buffer_t {
+    /* Buffers with instanced GPU data */
+    sg_buffer colors;
+    sg_buffer transforms;
+    sg_buffer materials;
+
+    /* Number of instances in buffers */
+    int32_t count;
+
+    /* Allocated size of instance buffers */
+    int32_t size;
+
+    /* Buffer id */
+    ecs_entity_t id;
+
+    /* ref<CellCoord> to find location and size of cell */
+    ecs_ref_t cell_coord;
+
+    /* Linked list with groups for buffers */
+    sokol_geometry_group_t *groups;
+
+    /* Linked list with all buffers for geometry */
+    struct sokol_geometry_buffer_t *prev, *next;
+
+    /* Did any of the group data change */
+    bool changed;
+} sokol_geometry_buffer_t;
+
+typedef struct sokol_geometry_buffers_t {
+    sokol_geometry_buffer_t *first;
+    ecs_map_t index; /* map<world_cell, sokol_geometry_buffer_t*> */
+} sokol_geometry_buffers_t;
 
 typedef struct SokolGeometry {
-    /* Static GPU buffers */
-    sg_buffer vertex_buffer;
-    sg_buffer normal_buffer;
-    sg_buffer index_buffer;
+    /* GPU buffers with static geometry data */
+    sg_buffer vertices;
+    sg_buffer normals;
+    sg_buffer indices;
 
     /* Number of indices */
     int32_t index_count;
 
-    /* Instanced data per category */
-    sokol_instances_t solid;
-    sokol_instances_t emissive;
+    /* Buffers with instanced data (one set per world cell) */
+    sokol_geometry_buffers_t *solid;
+    sokol_geometry_buffers_t *emissive;
 
     /* Function that copies geometry-specific data to GPU buffer */
     sokol_geometry_action_t populate;
+
+    /* Temporary storage for group ids to process */
+    ecs_vec_t group_ids;
 } SokolGeometry;
 
 typedef struct SokolGeometryQuery {
