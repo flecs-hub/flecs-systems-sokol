@@ -295,11 +295,11 @@ void FlecsSystemsSokolRendererImport(
         flecs.components.gui.Canvas, 
         [out] !flecs.systems.sokol.Renderer($));
 
-    /* Configure no_staging for SokolInitRenderer as it needs direct access to
+    /* Configure no_readonly for SokolInitRenderer as it needs direct access to
      * the world for creating queries */
     ecs_system(world, {
         .entity = SokolInitRenderer,
-        .no_staging = true
+        .no_readonly = true
     });
 
     /* System that cleans up renderer */

@@ -49,6 +49,9 @@ typedef struct sokol_geometry_group_t {
     /* Number of instances in the group */
     int32_t count;
 
+    /* Last match count. Used to detect if tables were removed from group */
+    int32_t match_count;
+
     /* Is group visible */
     bool visible;
 

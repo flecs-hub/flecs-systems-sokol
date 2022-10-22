@@ -279,6 +279,19 @@ void sokol_group_add_changed(
     ecs_vec_t *group_ids,
     uint64_t group_id)
 {
+    const ecs_query_group_info_t *gi = ecs_query_get_group_info(query, group_id);
+    if (!gi) {
+        return;
+    }
+
+    // If tables got added/removed to the group, it has changed
+    sokol_geometry_group_t *group = gi->ctx;
+    if (group->match_count != gi->match_count) {
+        sokol_groups_add(group_ids)[0] = group_id;
+        group->match_count = gi->match_count;
+        return;
+    }
+
     ecs_iter_t qit = ecs_query_iter(world, query);
     ecs_query_set_group(&qit, group_id);
 
@@ -313,7 +326,7 @@ static
 void sokol_update_visibility(
     const ecs_world_t *world,
     sokol_geometry_buffer_t *buffer,
-    const EcsPosition3 *view_pos,
+    const EcsPosition3 *view_pos_ptr,
     ecs_query_t *query,
     ecs_vec_t *group_ids)
 {
@@ -328,11 +341,16 @@ void sokol_update_visibility(
         sokol_groups_add_changed(world, query, group_ids, buffer);
         return;
     }
+    
+    EcsPosition3 view_pos = {0};
+    if (view_pos_ptr) {
+        view_pos = *view_pos_ptr; 
+    }
 
     // Compute distance from camera to the center of the world cell. This is
     // used to do broad phase elimination of groups, not individual entities.
-    int64_t view_x = view_pos->x;
-    int64_t view_z = view_pos->z;
+    int64_t view_x = view_pos.x;
+    int64_t view_z = view_pos.z;
     int64_t cell_x = cell->x;
     int64_t cell_y = cell->y;
     int64_t cell_size = cell->size / 2;
@@ -343,7 +361,7 @@ void sokol_update_visibility(
     int64_t dz = sokol_abs(view_z - cell_y);
     dz -= cell_size;
     dz *= (dz > 0);
-    int64_t dy = sokol_abs(view_pos->y);
+    int64_t dy = sokol_abs(view_pos.y);
     dy -= cell_size;
     dy *= (dy > 0);
     int64_t d_sqr = sokol_sqr(dx) + sokol_sqr(dy) + sokol_sqr(dz);
@@ -409,7 +427,8 @@ void sokol_update_group(
 {
     // Get the group context from the query. This context is created by the
     // sokol_on_group_create function.
-    sokol_geometry_group_t *group = ecs_query_get_group_ctx(query, group_id);
+    const ecs_query_group_info_t *gi = ecs_query_get_group_info(query, group_id);
+    sokol_geometry_group_t *group = gi->ctx;
     if (!group->visible) {
         // Ignore if the group is not visible.
         return;
@@ -483,9 +502,9 @@ void sokol_update_group(
 
             // Uncomment to use group id as vertex color
             // for (i = 0; i < to_copy; i ++) {
-            //     page->colors[pstart + i].r = ((float)(group_id % 7)) / 7.0;
-            //     page->colors[pstart + i].g = ((float)(group_id % 3)) / 3.0;
-            //     page->colors[pstart + i].b = ((float)(group_id % 11)) / 11.0;
+            //     page->colors[pstart + i].r = 0.1 + ((float)(group_id % 7)) / 7.0;
+            //     page->colors[pstart + i].g = 0;
+            //     page->colors[pstart + i].b = 0.3 + ((float)(group_id % 11)) / 11.0;
             // }
 
             // Copy material data
@@ -544,7 +563,7 @@ void sokol_update_buffer(
 
     // Make sure buffers with GPU data are large enough
     ecs_size_t size = next_pow_of_2(buffer->count);
-    if (size != buffer->size) {
+    if (size > buffer->size) {
         if (buffer->size) {
             sg_destroy_buffer(buffer->colors);
             sg_destroy_buffer(buffer->transforms);
@@ -599,6 +618,8 @@ void sokol_update_buffer(
 
         buffer_count += group_count;
         group = group->next;
+
+        ecs_assert(buffer_count <= buffer->size, ECS_OUT_OF_RANGE, NULL);
     }
 
     // Sanity check to make sure groups correctly updated the buffer count
@@ -738,6 +759,9 @@ void* sokol_on_group_create(
     if (next) {
         next->prev = result;
     }
+    
+    // Mark buffer as changed so new group gets added to buffers
+    buffer->changed = true;
 
     // If the group contains prefab instances, check if the prefab has a
     // DrawDistance component. If it does, it will be used to determine group
@@ -773,7 +797,9 @@ void sokol_on_group_delete(
         next->prev = prev;
     }
 
+    // Mark buffer as changed so group gets removed from buffers
     buffer->count -= group->count;
+    buffer->changed = true;
 
     if (buffer->groups == group) {
         buffer->groups = next;
@@ -905,6 +931,7 @@ void FlecsSystemsSokolGeometryImport(
     ECS_IMPORT(world, FlecsComponentsTransform);
     ECS_IMPORT(world, FlecsComponentsGeometry);
     ECS_IMPORT(world, FlecsSystemsTransform);
+    ECS_IMPORT(world, FlecsGame);
 
     /* Store components in parent sokol scope */
     ecs_entity_t parent = ecs_lookup_fullpath(world, "flecs.systems.sokol");
@@ -939,5 +966,5 @@ void FlecsSystemsSokolGeometryImport(
 
     /* Create system that manages buffers */
     ECS_SYSTEM(world, SokolPopulateGeometry, EcsPreStore, 
-        Geometry, [in] GeometryQuery);  
+        Geometry, [in] GeometryQuery, [in] flecs.game.WorldCell(0, *));
 }

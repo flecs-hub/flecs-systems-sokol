@@ -217,9 +217,9 @@ int sokol_run_action(
         height = canvas_data->height;
     }
 
+    bool high_dpi = true;
 #ifdef __EMSCRIPTEN__
-    width = 0; /* determined by browser */
-    height = 0;
+    high_dpi = false; /* high dpi doesn't work on mobile browsers */
 #endif
 
     /* Initialize input component */
@@ -236,7 +236,7 @@ int sokol_run_action(
         .width = width,
         .height = height,
         .sample_count = 1,
-        .high_dpi = true,
+        .high_dpi = high_dpi,
         .gl_force_gles2 = false
     });
 
