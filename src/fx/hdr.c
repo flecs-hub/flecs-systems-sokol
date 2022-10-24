@@ -57,6 +57,7 @@ SokolFx sokol_init_hdr(
     int width, int height)
 {
     ecs_trace("sokol: initialize hdr effect");
+    ecs_log_push();
 
     SokolFx fx = {0};
     fx.name = "Hdr";
@@ -152,6 +153,8 @@ SokolFx sokol_init_hdr(
             }
         }
     });
+
+    ecs_log_pop();
 
     return fx;
 }

@@ -145,6 +145,7 @@ SokolFx sokol_init_ssao(
     int width, int height)
 {
     ecs_trace("sokol: initialize ambient occlusion effect");
+    ecs_log_push();
 
     SokolFx fx = {0};
     fx.name = "AmbientOcclusion";
@@ -204,6 +205,8 @@ SokolFx sokol_init_ssao(
             }
         }
     });
+
+    ecs_log_pop();
 
     return fx;
 }

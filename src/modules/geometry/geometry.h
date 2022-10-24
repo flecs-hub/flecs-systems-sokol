@@ -62,17 +62,6 @@ typedef struct sokol_geometry_group_t {
 /* Buffers are maintained per world cell. Multiple groups can be stored in one
  * set of buffers if a cell contains entities of different kinds of prefabs. */
 typedef struct sokol_geometry_buffer_t {
-    /* Buffers with instanced GPU data */
-    sg_buffer colors;
-    sg_buffer transforms;
-    sg_buffer materials;
-
-    /* Number of instances in buffers */
-    int32_t count;
-
-    /* Allocated size of instance buffers */
-    int32_t size;
-
     /* Buffer id */
     ecs_entity_t id;
 
@@ -92,6 +81,23 @@ typedef struct sokol_geometry_buffer_t {
 typedef struct sokol_geometry_buffers_t {
     sokol_geometry_buffer_t *first;
     ecs_map_t index; /* map<world_cell, sokol_geometry_buffer_t*> */
+
+    /* Temporary buffers for storing data gathered from ECS. This allows data to
+     * be copied in one call to the graphics API. */
+    ecs_vec_t colors_data;
+    ecs_vec_t transforms_data;
+    ecs_vec_t materials_data;
+
+    /* Sokol buffers with instanced data */
+    sg_buffer colors;
+    sg_buffer transforms;
+    sg_buffer materials;
+
+    /* Number of instances */
+    int32_t instance_count;
+
+    /* Allocator */
+    ecs_allocator_t allocator;
 } sokol_geometry_buffers_t;
 
 typedef struct SokolGeometry {

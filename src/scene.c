@@ -263,31 +263,24 @@ void scene_draw_instances(
     sokol_geometry_buffers_t *buffers,
     sg_image shadow_map)
 {
-    sokol_geometry_buffer_t *buffer = buffers->first;
-    int32_t index_count = geometry->index_count;
-    if (buffer) {
-        do {
-            int32_t count = buffer->count;
-            if (!count) {
-                continue;
-            }
-
-            sg_bindings bind = {
-                .vertex_buffers = {
-                    [POSITION_I] =  geometry->vertices,
-                    [NORMAL_I] =    geometry->normals,
-                    [COLOR_I] =     buffer->colors,
-                    [MATERIAL_I] =  buffer->materials,
-                    [TRANSFORM_I] = buffer->transforms
-                },
-                .index_buffer = geometry->indices,
-                .fs_images[0] = shadow_map
-            };
-
-            sg_apply_bindings(&bind);
-            sg_draw(0, index_count, count);
-        } while ((buffer = buffer->next));
+    if (!buffers->instance_count) {
+        return;
     }
+
+    sg_bindings bind = {
+        .vertex_buffers = {
+            [POSITION_I] =  geometry->vertices,
+            [NORMAL_I] =    geometry->normals,
+            [COLOR_I] =     buffers->colors,
+            [MATERIAL_I] =  buffers->materials,
+            [TRANSFORM_I] = buffers->transforms
+        },
+        .index_buffer = geometry->indices,
+        .fs_images[0] = shadow_map
+    };
+
+    sg_apply_bindings(&bind);
+    sg_draw(0, geometry->index_count, buffers->instance_count);
 }
 
 void sokol_run_scene_pass(
@@ -298,7 +291,7 @@ void sokol_run_scene_pass(
     glm_mat4_copy(state->uniforms.mat_v, vs_u.mat_v);
     glm_mat4_copy(state->uniforms.mat_vp, vs_u.mat_vp);
     glm_mat4_copy(state->uniforms.light_mat_vp, vs_u.light_mat_vp);
-    
+
     scene_fs_uniforms_t fs_u;
     glm_vec3_copy(state->uniforms.light_ambient, fs_u.light_ambient);
     glm_vec3_copy(state->uniforms.light_direction, fs_u.light_direction);

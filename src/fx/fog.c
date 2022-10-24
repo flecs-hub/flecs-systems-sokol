@@ -24,6 +24,7 @@ SokolFx sokol_init_fog(
     int width, int height)
 {
     ecs_trace("sokol: initialize fog effect");
+    ecs_log_push();
 
     SokolFx fx = {0};
     fx.name = "Fog";
@@ -46,6 +47,8 @@ SokolFx sokol_init_fog(
             }
         }
     });
+
+    ecs_log_pop();
 
     return fx;
 }

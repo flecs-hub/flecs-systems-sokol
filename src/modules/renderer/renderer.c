@@ -169,8 +169,8 @@ void SokolRender(ecs_iter_t *it) {
     if (canvas->directional_light) {
         state.light = ecs_get(world, canvas->directional_light, 
             EcsDirectionalLight);
-        sokol_init_light_mat_vp(&state);
-        sokol_run_shadow_pass(&r->shadow_pass, &state);  
+        // sokol_init_light_mat_vp(&state);
+        // sokol_run_shadow_pass(&r->shadow_pass, &state);  
     } else {
         /* Set default ambient light if nothing is configured */
         if (!state.ambient_light.r && !state.ambient_light.g && 

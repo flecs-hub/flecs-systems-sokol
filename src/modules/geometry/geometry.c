@@ -13,8 +13,33 @@ sokol_geometry_buffers_t* sokol_create_buffers(void) {
     sokol_geometry_buffers_t *result = ecs_os_calloc_t(sokol_geometry_buffers_t);
     result->first = NULL;
     ecs_map_init(&result->index, sokol_geometry_buffer_t*, NULL, 0);
+
+    flecs_allocator_init(&result->allocator);
+    ecs_vec_init_t(&result->allocator, &result->colors_data, ecs_rgb_t, 0);
+    ecs_vec_init_t(&result->allocator, &result->transforms_data, mat4, 0);
+    ecs_vec_init_t(&result->allocator, &result->materials_data, SokolMaterial, 0);
+
     return result;
 }
+
+static
+void sokol_delete_buffers(sokol_geometry_buffers_t* result) {
+    result->first = NULL;
+
+    ecs_map_fini(&result->index);
+
+    sg_destroy_buffer(result->colors);
+    sg_destroy_buffer(result->transforms);
+    sg_destroy_buffer(result->materials);
+
+    ecs_vec_fini_t(&result->allocator, &result->colors_data, ecs_rgb_t);
+    ecs_vec_fini_t(&result->allocator, &result->transforms_data, mat4);
+    ecs_vec_fini_t(&result->allocator, &result->materials_data, SokolMaterial);
+    flecs_allocator_fini(&result->allocator);
+
+    ecs_os_free(result);
+}
+
 
 // The buffer type holds buffers managed by sokol that contain GPU data. A 
 // buffer instance is created for each world cell.
@@ -74,10 +99,6 @@ void sokol_delete_buffer(
         buffers->first = next;
     }
 
-    sg_destroy_buffer(buffer->colors);
-    sg_destroy_buffer(buffer->transforms);
-    sg_destroy_buffer(buffer->materials);
-
     ecs_map_remove(&buffers->index, buffer->id);
     ecs_os_free(buffer);
 }
@@ -89,8 +110,8 @@ ECS_CTOR(SokolGeometry, ptr, {
 })
 
 ECS_DTOR(SokolGeometry, ptr, {
-    ecs_os_free(ptr->solid);
-    ecs_os_free(ptr->emissive);
+    sokol_delete_buffers(ptr->solid);
+    sokol_delete_buffers(ptr->emissive);
 })
 
 static
@@ -341,7 +362,7 @@ void sokol_update_visibility(
         sokol_groups_add_changed(world, query, group_ids, buffer);
         return;
     }
-    
+
     EcsPosition3 view_pos = {0};
     if (view_pos_ptr) {
         view_pos = *view_pos_ptr; 
@@ -391,7 +412,6 @@ void sokol_update_visibility(
         float draw_distance_sqr = sokol_sqr(vd->far_);
         bool visible = d_sqr < draw_distance_sqr;
         bool changed = visible != group->visible;
-        int32_t count = group->count;
 
         // If visibility of a group has changed (either it became visible or
         // invisible) flag that the buffers for this world cell need to be
@@ -401,7 +421,6 @@ void sokol_update_visibility(
         // If visibility changed, update the instance count for the buffer. This
         // is kept up to date so that the code that populates the buffers knows
         // in advance whether the sokol/GPU buffers need to be resized.
-        buffer->count += changed * (visible * count - !visible * count);
         group->visible = visible;
         if (visible) {
             // Only check if the group has changed data if it's visible. This
@@ -416,7 +435,7 @@ void sokol_update_visibility(
 
 // A group contains instances for a prefab in a specific world cell. This
 // function is called if a change was detected for the data (tables) contained
-// by the group.
+// by the group, and copies data from tables into group pages.
 static
 void sokol_update_group(
     const ecs_world_t *world,
@@ -445,11 +464,6 @@ void sokol_update_group(
         page->count = 0;
     }
 
-    // To keep the instance count in the buffer in sync, first remove the old
-    // instance count of the group from the buffer. Once we know how many 
-    // entities are in the group after the changes, the new group count will be
-    // added to the buffer again.
-    buffer->count -= group->count;
     group->count = 0;
 
     // Iterate all tables for this group
@@ -539,9 +553,6 @@ void sokol_update_group(
     // buffer code know where to stop iterating the group.
     group->first_no_data = page->next;
 
-    // Add group count to buffer
-    buffer->count += group->count;
-
     // Flag buffer as changed
     buffer->changed = true;
 }
@@ -550,38 +561,16 @@ void sokol_update_group(
 static
 void sokol_update_buffer(
     const ecs_world_t *world,
+    sokol_geometry_buffers_t *buffers,
     sokol_geometry_buffer_t *buffer)
 {
-    if (!buffer->changed) {
-        // Only update buffer data if one of the buffer groups had a change,
-        // either because its visiblity changed or it was visible and its
-        // data changed.
-        return;
-    }
+    ecs_allocator_t *a = &buffers->allocator;
+    ecs_vec_t *colors_data = &buffers->colors_data;
+    ecs_vec_t *transforms_data = &buffers->transforms_data;
+    ecs_vec_t *materials_data = &buffers->materials_data;
 
-    buffer->changed = false;
-
-    // Make sure buffers with GPU data are large enough
-    ecs_size_t size = next_pow_of_2(buffer->count);
-    if (size > buffer->size) {
-        if (buffer->size) {
-            sg_destroy_buffer(buffer->colors);
-            sg_destroy_buffer(buffer->transforms);
-            sg_destroy_buffer(buffer->materials);
-        }
-
-        buffer->colors = sg_make_buffer(&(sg_buffer_desc){
-            .size = size * sizeof(ecs_rgb_t), .usage = SG_USAGE_STREAM });
-        buffer->transforms = sg_make_buffer(&(sg_buffer_desc){
-            .size = size * sizeof(EcsTransform3), .usage = SG_USAGE_STREAM });
-        buffer->materials = sg_make_buffer(&(sg_buffer_desc){
-            .size = size * sizeof(SokolMaterial), .usage = SG_USAGE_STREAM });
-        buffer->size = size;
-    }
-
-    // Copy data from groups to GPU buffers
+    // Copy data from groups to temporary buffers before copying to sokol buffers
     sokol_geometry_group_t *group = buffer->groups;
-    int32_t buffer_count = 0;
     while (group) {
         if (!group->visible) {
             // Skip groups that aren't visible
@@ -597,12 +586,12 @@ void sokol_update_buffer(
         while (page != end) {
             int32_t count = page->count;
 
-            sg_append_buffer(buffer->colors, &(sg_range) {
-                page->colors, count * sizeof(ecs_rgb_t) });
-            sg_append_buffer(buffer->transforms, &(sg_range) {
-                page->transforms, count * sizeof(EcsTransform3) });
-            sg_append_buffer(buffer->materials, &(sg_range) {
-                page->materials, count * sizeof(SokolMaterial) });
+            ecs_os_memcpy_n( ecs_vec_grow_t(a, colors_data, ecs_rgb_t, count),
+                page->colors, ecs_rgb_t, count);
+            ecs_os_memcpy_n( ecs_vec_grow_t(a, transforms_data, mat4, count),
+                page->transforms, mat4, count);
+            ecs_os_memcpy_n( ecs_vec_grow_t(a, materials_data, SokolMaterial, count),
+                page->materials, SokolMaterial, count);
 
             group_count += count;
             page = page->next;
@@ -616,18 +605,7 @@ void sokol_update_buffer(
             ecs_os_free(str);
         }
 
-        buffer_count += group_count;
         group = group->next;
-
-        ecs_assert(buffer_count <= buffer->size, ECS_OUT_OF_RANGE, NULL);
-    }
-
-    // Sanity check to make sure groups correctly updated the buffer count
-    if (buffer_count != buffer->count) {
-        char *str = ecs_get_fullpath(world, buffer->id);
-        ecs_err("buffer %s reports incorrect number of instances (%d vs %d)", 
-            str, buffer_count, buffer->count);
-        ecs_os_free(str);
     }
 }
 
@@ -667,6 +645,7 @@ void sokol_populate_buffers(
     const EcsPosition3 *view_pos)
 {
     const ecs_world_t *world = ecs_get_world(query);
+    ecs_allocator_t *a = &buffers->allocator;
 
     // Vector to keep track of changed group ids
     ecs_vec_t *group_ids = &geometry->group_ids;
@@ -693,12 +672,50 @@ void sokol_populate_buffers(
         }
     }
 
-    // Update GPU buffers with changed group data
+    // Collect data from buffers
+    ecs_size_t old_size = ecs_vec_size(&buffers->colors_data);
     {
+        ecs_vec_reset_t(a, &buffers->colors_data, ecs_rgb_t);
+        ecs_vec_reset_t(a, &buffers->transforms_data, mat4);
+        ecs_vec_reset_t(a, &buffers->materials_data, SokolMaterial);
+
         sokol_geometry_buffer_t *buffer = buffers->first;
         while (buffer) {
-            sokol_update_buffer(world, buffer);
+            sokol_update_buffer(world, buffers, buffer);
             buffer = buffer->next;
+        }
+    }
+
+    // Populate sokol buffers
+    {
+        ecs_size_t new_size = ecs_vec_size(&buffers->colors_data);
+        if (new_size != old_size) {
+            if (old_size) {
+                sg_destroy_buffer(buffers->colors);
+                sg_destroy_buffer(buffers->transforms);
+                sg_destroy_buffer(buffers->materials);
+            }
+
+            buffers->colors = sg_make_buffer(&(sg_buffer_desc){
+                .size = new_size * sizeof(ecs_rgb_t), .usage = SG_USAGE_STREAM });
+            buffers->transforms = sg_make_buffer(&(sg_buffer_desc){
+                .size = new_size * sizeof(EcsTransform3), .usage = SG_USAGE_STREAM });
+            buffers->materials = sg_make_buffer(&(sg_buffer_desc){
+                .size = new_size * sizeof(SokolMaterial), .usage = SG_USAGE_STREAM });
+        }
+
+        buffers->instance_count = ecs_vec_count(&buffers->colors_data);
+
+        if (buffers->instance_count > 0) {
+            sg_update_buffer(buffers->colors, &(sg_range) {
+                ecs_vec_first_t(&buffers->colors_data, ecs_rgb_t), 
+                    buffers->instance_count * sizeof(ecs_rgb_t) } );
+            sg_update_buffer(buffers->transforms, &(sg_range) {
+                ecs_vec_first_t(&buffers->transforms_data, mat4), 
+                    buffers->instance_count * sizeof(mat4) } );
+            sg_update_buffer(buffers->materials, &(sg_range) {
+                ecs_vec_first_t(&buffers->materials_data, SokolMaterial), 
+                    buffers->instance_count * sizeof(SokolMaterial) } );
         }
     }
 }
@@ -798,7 +815,6 @@ void sokol_on_group_delete(
     }
 
     // Mark buffer as changed so group gets removed from buffers
-    buffer->count -= group->count;
     buffer->changed = true;
 
     if (buffer->groups == group) {

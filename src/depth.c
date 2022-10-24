@@ -170,25 +170,20 @@ void depth_draw_instances(
     SokolGeometry *geometry,
     sokol_geometry_buffers_t *buffers)
 {
-    sokol_geometry_buffer_t *buffer = buffers->first;
-    if (buffer) {
-        do {
-            if (!buffer->count) {
-                continue;
-            }
-
-            sg_bindings bind = {
-                .vertex_buffers = {
-                    [0] = geometry->vertices,
-                    [1] = buffer->transforms
-                },
-                .index_buffer = geometry->indices
-            };
-
-            sg_apply_bindings(&bind);
-            sg_draw(0, geometry->index_count, buffer->count);
-        } while ((buffer = buffer->next));
+    if (!buffers->instance_count) {
+        return;
     }
+
+    sg_bindings bind = {
+        .vertex_buffers = {
+            [0] = geometry->vertices,
+            [1] = buffers->transforms
+        },
+        .index_buffer = geometry->indices
+    };
+
+    sg_apply_bindings(&bind);
+    sg_draw(0, geometry->index_count, buffers->instance_count);
 }
 
 void sokol_run_depth_pass(
