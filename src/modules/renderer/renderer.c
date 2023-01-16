@@ -82,7 +82,9 @@ void sokol_init_global_uniforms(
         state->uniforms.ortho = cam.ortho;
 
         glm_vec3_copy(cam.position, state->uniforms.eye_pos);
+        state->uniforms.eye_pos[0] = -state->uniforms.eye_pos[0];
         glm_vec3_copy(cam.lookat, state->uniforms.eye_lookat);
+        state->uniforms.eye_lookat[0] = -state->uniforms.eye_lookat[0];
     }
 
     /* Orthographic/perspective projection matrix */
@@ -100,6 +102,11 @@ void sokol_init_global_uniforms(
 
     /* View + view * projection matrix */
     glm_lookat(state->uniforms.eye_pos, state->uniforms.eye_lookat, state->uniforms.eye_up, state->uniforms.mat_v);
+
+    /* Flip x axis so -1 is on left and 1 is on right */
+    vec3 flip_x = {-1, 1, 1};
+    glm_scale(state->uniforms.mat_v, flip_x);
+
     glm_mat4_mul(state->uniforms.mat_p, state->uniforms.mat_v, state->uniforms.mat_vp);
 
     /* Light parameters */
@@ -170,7 +177,7 @@ void SokolRender(ecs_iter_t *it) {
         state.light = ecs_get(world, canvas->directional_light, 
             EcsDirectionalLight);
         // sokol_init_light_mat_vp(&state);
-        // sokol_run_shadow_pass(&r->shadow_pass, &state);  
+        // sokol_run_shadow_pass(&r->shadow_pass, &state);
     } else {
         /* Set default ambient light if nothing is configured */
         if (!state.ambient_light.r && !state.ambient_light.g && 

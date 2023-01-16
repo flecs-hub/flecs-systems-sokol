@@ -11,7 +11,7 @@ const char *shd_ssao_header =
     "#define NUM_RINGS 3\n"
     "#define KERNEL_RADIUS 35.0\n"
     // Intensity of the effect.
-    "#define INTENSITY 1.0\n"
+    "#define INTENSITY 0.5\n"
     // Misc params, tweaked to match the renderer
     "#define BIAS 0.2\n"
     "#define SCALE 1.0\n"
