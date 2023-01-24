@@ -237,6 +237,10 @@ void sokol_input_action(const sapp_event* evt, sokol_app_ctx_t *ctx) {
 
 static
 void sokol_frame_action(sokol_app_ctx_t *ctx) {
+    if (ecs_should_quit(ctx->world)) {
+        sapp_quit();
+    }
+
     ecs_app_run_frame(ctx->world, ctx->desc);
 
     /* Reset input buffer */
