@@ -5,13 +5,11 @@
 static
 const char *shd_ssao_header = 
     // Increase/decrease to trade quality for performance
-    "#define NUM_SAMPLES 4\n"
+    "#define NUM_SAMPLES 8\n"
     // The sample kernel uses a spiral pattern so most samples are concentrated
     // close to the center. 
     "#define NUM_RINGS 3\n"
-    "#define KERNEL_RADIUS 35.0\n"
-    // Intensity of the effect.
-    "#define INTENSITY 0.5\n"
+    "#define KERNEL_RADIUS 15.0\n"
     // Misc params, tweaked to match the renderer
     "#define BIAS 0.2\n"
     "#define SCALE 1.0\n"
@@ -125,7 +123,11 @@ const char *shd_ssao =
     "float ambientOcclusion = getAmbientOcclusion( viewPosition, centerDepth );\n"
 
     // Store value as rgba to increase precision
-    "frag_color = float_to_rgba(ambientOcclusion);\n"
+    "float max_dist = 0.1;\n"
+    "float mult = 1.0 / max_dist;\n"
+    "frag_color = float_to_rgba(ambientOcclusion) * max(0.0, max_dist - centerDepthNorm) * mult;\n"
+    // "frag_color = vec4(centerDepthNorm, centerDepthNorm, centerDepthNorm, 0);\n"
+    // "frag_color = vec4(0, 0, 0, 0);\n"
     ;
 
 static
@@ -149,6 +151,12 @@ SokolFx sokol_init_ssao(
     ecs_trace("sokol: initialize ambient occlusion effect");
     ecs_log_push();
 
+#ifdef __EMSCRIPTEN__
+    float factor = 2.0;
+#else
+    float factor = 1.0;
+#endif
+
     SokolFx fx = {0};
     fx.name = "AmbientOcclusion";
     fx.width = width;
@@ -157,7 +165,7 @@ SokolFx sokol_init_ssao(
     // Ambient occlusion shader 
     int32_t ao = sokol_fx_add_pass(&fx, &(sokol_fx_pass_desc_t){
         .name = "ssao",
-        .outputs = {{ .global_size = true, .factor = 1.0 }},
+        .outputs = {{ .global_size = true, .factor = factor }},
         .shader_header = shd_ssao_header,
         .shader = shd_ssao,
         .color_format = SG_PIXELFORMAT_RGBA8,
@@ -172,7 +180,7 @@ SokolFx sokol_init_ssao(
     // Blur to reduce the noise, so we can keep sample count low
     int blur = sokol_fx_add_pass(&fx, &(sokol_fx_pass_desc_t){
         .name = "blur",
-        .outputs = {{512}},
+        .outputs = {{1024}},
         .shader_header = shd_blur_hdr,
         .shader = shd_blur,
         .color_format = SG_PIXELFORMAT_RGBA8,
@@ -183,7 +191,7 @@ SokolFx sokol_init_ssao(
                 .name = "ssao hblur",
                 .inputs = { {SOKOL_FX_PASS(ao)} },
                 .params = { 1.0 },
-                .loop_count = 3
+                .loop_count = 4
             },
             [1] = { 
                 .name = "ssao vblur",

@@ -4,6 +4,8 @@ typedef struct scene_vs_uniforms_t {
     mat4 mat_v;
     mat4 mat_vp;
     mat4 light_mat_vp;
+    float near_;
+    float far_;
 } scene_vs_uniforms_t;
 
 typedef struct scene_fs_uniforms_t {
@@ -31,7 +33,10 @@ sg_pipeline init_scene_pipeline(int32_t sample_count) {
                 .uniforms = {
                     [0] = { .name="u_mat_v", .type=SG_UNIFORMTYPE_MAT4 },
                     [1] = { .name="u_mat_vp", .type=SG_UNIFORMTYPE_MAT4 },
-                    [2] = { .name="u_light_vp", .type=SG_UNIFORMTYPE_MAT4 }
+                    [2] = { .name="u_light_vp", .type=SG_UNIFORMTYPE_MAT4 },
+                    [3] = { .name="dummy", .type=SG_UNIFORMTYPE_FLOAT2 },
+                    [4] = { .name="u_near", .type=SG_UNIFORMTYPE_FLOAT },
+                    [5] = { .name="u_far", .type=SG_UNIFORMTYPE_FLOAT }
                 },
             }
         },
@@ -107,12 +112,21 @@ sg_pipeline init_scene_pipeline(int32_t sample_count) {
 
             "float sampleShadow(sampler2D shadowMap, vec2 uv, float compare) {\n"
             "    float depth = decodeDepth(texture(shadowMap, vec2(uv.x, uv.y)));\n"
-            "    depth += 0.0001;\n"
+            "    if (depth >= 1.0) return 1.0;"
+            "    depth += 0.002;\n"
             "    return step(compare, depth);\n"
             "}\n"
 
             "float sampleShadowPCF(sampler2D shadowMap, vec2 uv, float texel_size, float compare) {\n"
             "    float result = 0.0;\n"
+            ""
+            "    if (uv.x < 0 || uv.x > 1.0) {"
+            "      return 1.0;"
+            "    }"
+            "    if (uv.y < 0 || uv.y > 1.0) {"
+            "      return 1.0;"
+            "    }"
+            ""
             "    for (int x = -pcf_count; x <= pcf_count; x++) {\n"
             "        for (int y = -pcf_count; y <= pcf_count; y++) {\n"
             "            result += sampleShadow(shadowMap, uv + vec2(x, y) * texel_size * texel_c, compare);\n"
@@ -134,13 +148,12 @@ sg_pipeline init_scene_pipeline(int32_t sample_count) {
             "    vec3 v = normalize(u_eye_pos - position.xyz);\n"
             "    vec3 r = reflect(-l, n);\n"
 
-            // "    vec3 light_pos = light_position.xyz / light_position.w;\n"
-            // "    vec2 sm_uv = (light_pos.xy + 1.0) * 0.5;\n"
-            // "    float depth = light_position.z;\n"
-            // "    float texel_size = 1.0 / u_shadow_map_size;\n"
-            // "    float s = sampleShadowPCF(shadow_map, sm_uv, texel_size, depth);\n"
-            // "    s = max(s, emissive);\n"
-            "    float s = 1.0;\n" // disable shadows for now
+            "    vec3 light_pos = light_position.xyz / light_position.w;\n"
+            "    vec2 sm_uv = (light_pos.xy + 1.0) * 0.5;\n"
+            "    float depth = light_position.z;\n"
+            "    float texel_size = 1.0 / u_shadow_map_size;\n"
+            "    float s = sampleShadowPCF(shadow_map, sm_uv, texel_size, depth);\n"
+            "    s = max(s, emissive);\n"
 
             "    float r_dot_v = max(dot(r, v), 0.0);\n"
             "    float l_shiny = pow(r_dot_v * n_dot_l, shininess);\n"
@@ -291,6 +304,8 @@ void sokol_run_scene_pass(
     glm_mat4_copy(state->uniforms.mat_v, vs_u.mat_v);
     glm_mat4_copy(state->uniforms.mat_vp, vs_u.mat_vp);
     glm_mat4_copy(state->uniforms.light_mat_vp, vs_u.light_mat_vp);
+    vs_u.near_ = state->uniforms.near_;
+    vs_u.far_ = state->uniforms.far_;
 
     scene_fs_uniforms_t fs_u;
     glm_vec3_copy(state->uniforms.light_ambient, fs_u.light_ambient);

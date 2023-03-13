@@ -66,29 +66,23 @@ SokolFx sokol_init_hdr(
 
     int threshold = sokol_fx_add_pass(&fx, &(sokol_fx_pass_desc_t){
         .name = "threshold",
-        .outputs = {{64}, {256}},
+        .outputs = {{1024}},
         .shader = shd_threshold,
         .color_format = SG_PIXELFORMAT_RGBA16F,
         .inputs = { "hdr" },
         .params = { "threshold", "mipmap" },
         .steps = {
             [0] = {
-                .name = "halo",
+                .name = "glow",
                 .params = { 4.0, 1.0 },
                 .inputs = { {FX_INPUT_HDR} }
-            },
-            [1] = {
-                .name = "glow",
-                .params = { 3.0 },
-                .inputs = { {FX_INPUT_HDR} },
-                .output = 1
             }
         }
     });
 
     int blur = sokol_fx_add_pass(&fx, &(sokol_fx_pass_desc_t){
         .name = "blur",
-        .outputs = {{64}, {256}},
+        .outputs = {{256}, {512}},
         .shader_header = shd_blur_hdr,
         .shader = shd_blur,
         .color_format = SG_PIXELFORMAT_RGBA16F,
@@ -111,9 +105,9 @@ SokolFx sokol_init_hdr(
             /* glow */
             [2] = { 
                 .name = "glow hblur",
-                .inputs = { {SOKOL_FX_PASS(threshold), 1} },
+                .inputs = { {SOKOL_FX_PASS(threshold), 0} },
                 .params = { 1.0 },
-                .loop_count = 2,
+                .loop_count = 4,
                 .output = 1,
             },
             [3] = { 
@@ -135,7 +129,7 @@ SokolFx sokol_init_hdr(
             [0] = {
                 .name = "halo + glow",
                 .inputs = { {SOKOL_FX_PASS(blur), 0}, {SOKOL_FX_PASS(blur), 1} }, 
-                .params = { 1.0, 1.0 }
+                .params = { 0.3, 1.0 }
             }
         }
     });

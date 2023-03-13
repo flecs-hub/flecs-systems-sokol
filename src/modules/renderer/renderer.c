@@ -1,4 +1,5 @@
 #include "../../private_api.h"
+#include "math.h"
 
 ECS_COMPONENT_DECLARE(SokolRenderer);
 
@@ -20,35 +21,196 @@ sokol_resources_t sokol_init_resources(void) {
     };
 }
 
+
+    // mat4 mat_p;
+    // mat4 mat_v;
+    // vec3 lookat = {0.0, 0.0, 0.0};
+    // vec3 up = {0, 1, 0};
+
+    // glm_ortho(-50, 50, -50, 50, 1, 200, mat_p);
+
+    // vec4 dir = {
+    //     state->light->direction[0],
+    //     state->light->direction[1],
+    //     state->light->direction[2]
+    // };
+    // glm_vec4_scale(dir, 1.0, dir);
+    // glm_lookat(dir, lookat, up, mat_v);
+
+    // mat4 light_proj = {
+    //      { 0.5f, 0.0f, 0.0f, 0 },
+    //      { 0.0f, 0.5f, 0.0f, 0 },
+    //      { 0.0f, 0.0f, 0.5f, 0 },
+    //      { 0.5f, 0.5f, 0.5f, 1 }
+    // };
+    
+    // glm_mat4_mul(mat_p, light_proj, mat_p);
+    // glm_mat4_mul(mat_p, mat_v, state->uniforms.light_mat_vp);
+
+typedef struct {
+    // far plane
+    vec3 c_far;  // center
+    vec3 tl_far; // top left
+    vec3 tr_far; // top right
+    vec3 bl_far; // bottom left
+    vec3 br_far; // bottom right
+
+    // near plane
+    vec3 c_near;  // center
+    vec3 tl_near; // top left
+    vec3 tr_near; // top right
+    vec3 bl_near; // bottom left
+    vec3 br_near; // bottom right
+
+    // frustum center
+    vec3 c_frustum;
+} sokol_frustum_t;
+
+static
+void vec3_copy4(vec3 src, float v4, vec4 dst) {
+    dst[0] = src[0];
+    dst[1] = src[1];
+    dst[2] = src[2];
+    dst[3] = v4;
+}
+
 /* Light matrix (used for shadow map calculation) */
 static
 void sokol_init_light_mat_vp(
     sokol_render_state_t *state)
 {
-    mat4 mat_p;
-    mat4 mat_v;
-    vec3 lookat = {0.0, 0.0, 0.0};
-    vec3 up = {0, 1, 0};
+    vec3 orig = {0, 0, 0};
+    sokol_global_uniforms_t *u = &state->uniforms;
 
-    glm_ortho(-1000, 1000, -1000, 1000, 1.0, 50, mat_p);
+    // Direction vector
+    vec3 d; glm_vec3_sub(u->eye_lookat, u->eye_pos, d);
+    d[0] *= -1;
+    glm_vec3_normalize(d);
 
-    vec4 dir = {
-        state->light->direction[0],
-        state->light->direction[1],
-        state->light->direction[2]
-    };
-    glm_vec4_scale(dir, 1.0, dir);
-    glm_lookat(dir, lookat, up, mat_v);
+    // Cross product of direction & up
+    vec3 right; glm_vec3_cross(d, u->eye_up, right);
 
-    mat4 light_proj = {
+    float ar = state->uniforms.aspect;
+    float fov = state->uniforms.fov;
+    float near_ = state->uniforms.near_;
+    float far_ = state->uniforms.far_;
+
+    far_ = 96; /* Max shadow distance */
+
+    float Hnear = 2 * tan(fov / 2) * near_;
+    float Wnear = Hnear * ar;
+    float Hfar = 2 * tan(fov / 2) * far_;
+    float Wfar = Hfar * ar;
+    vec3 camera_pos; glm_vec3_copy(state->uniforms.eye_pos, camera_pos);
+    camera_pos[0] *= -1;
+    
+    sokol_frustum_t f_cam;
+
+    // Points on far plane
+    glm_vec3_scale(d, far_, f_cam.c_far);
+    glm_vec3_add(camera_pos, f_cam.c_far, f_cam.c_far);
+
+    vec3 u_hfar; glm_vec3_scale(u->eye_up, Hfar / 2, u_hfar);
+    vec3 r_wfar; glm_vec3_scale(right, Wfar / 2, r_wfar);
+
+    glm_vec3_add(f_cam.c_far, u_hfar, f_cam.tl_far);
+    glm_vec3_sub(f_cam.tl_far, r_wfar, f_cam.tl_far);
+
+    glm_vec3_add(f_cam.c_far, u_hfar, f_cam.tr_far);
+    glm_vec3_add(f_cam.tr_far, r_wfar, f_cam.tr_far);
+
+    glm_vec3_sub(f_cam.c_far, u_hfar, f_cam.bl_far);
+    glm_vec3_sub(f_cam.bl_far, r_wfar, f_cam.bl_far);
+
+    glm_vec3_sub(f_cam.c_far, u_hfar, f_cam.br_far);
+    glm_vec3_add(f_cam.br_far, r_wfar, f_cam.br_far);
+
+    // // Points on near plane
+    glm_vec3_scale(d, near_, f_cam.c_near);
+    glm_vec3_add(camera_pos, f_cam.c_near, f_cam.c_near);
+
+    vec3 u_hnear; glm_vec3_scale(u->eye_up, Hnear / 2, u_hnear);
+    vec3 r_wnear; glm_vec3_scale(right, Wnear / 2, r_wnear);
+
+    glm_vec3_add(f_cam.c_near, u_hnear, f_cam.tl_near);
+    glm_vec3_sub(f_cam.tl_near, r_wnear, f_cam.tl_near);
+
+    glm_vec3_add(f_cam.c_near, u_hnear, f_cam.tr_near);
+    glm_vec3_add(f_cam.tr_near, r_wnear, f_cam.tr_near);
+
+    glm_vec3_sub(f_cam.c_near, u_hnear, f_cam.bl_near);
+    glm_vec3_sub(f_cam.bl_near, r_wnear, f_cam.bl_near);
+
+    glm_vec3_sub(f_cam.c_near, u_hnear, f_cam.br_near);
+    glm_vec3_add(f_cam.br_near, r_wnear, f_cam.br_near);
+
+    // // Light "position"
+    vec3 light_pos_norm;
+    glm_vec3_scale(u->light_direction, -1, light_pos_norm);
+    glm_vec3_normalize(light_pos_norm);
+
+    // Light view matrix
+    mat4 mat_light_view;
+    glm_lookat(light_pos_norm, orig, u->eye_up, mat_light_view);
+
+    // // Frustum to light view
+    vec4 f_light[8];
+    vec3_copy4(f_cam.br_near, 1.0, f_light[0]);
+    vec3_copy4(f_cam.tr_near, 1.0, f_light[1]);
+    vec3_copy4(f_cam.bl_near, 1.0, f_light[2]);
+    vec3_copy4(f_cam.tl_near, 1.0, f_light[3]);
+
+    vec3_copy4(f_cam.br_far, 1.0, f_light[4]);
+    vec3_copy4(f_cam.tr_far, 1.0, f_light[5]);
+    vec3_copy4(f_cam.bl_far, 1.0, f_light[6]);
+    vec3_copy4(f_cam.tl_far, 1.0, f_light[7]);
+
+    for (int i = 0; i < 8; i ++) {
+        glm_mat4_mulv(mat_light_view, f_light[i], f_light[i]);
+    }
+
+    // Find min/max points for defining the orthographic light matrix
+    vec3 min = { INFINITY, INFINITY, INFINITY };
+    vec3 max = { -INFINITY, -INFINITY, -INFINITY };
+    for (int i = 0; i < 8; i ++) {
+        for (int c = 0; c < 3; c ++) {
+            min[c] = glm_min(min[c], f_light[i][c]);
+        }
+        for (int c = 0; c < 3; c ++) {
+            max[c] = glm_max(max[c], f_light[i][c]);
+        }
+    }
+
+    // Get parameters for orthographic matrix
+    float l = min[0];
+    float r = max[0];
+    float b = min[1];
+    float t = max[1];
+    float n = -max[2];
+    float f = -min[2];
+
+    // Discretize coordinates
+    const int step_size = 32;
+    l = floor(l / step_size) * step_size;
+    r = ceil(r / step_size) * step_size;
+    b = floor(b / step_size) * step_size;
+    t = ceil(t / step_size) * step_size;
+    n = floor(n / step_size) * step_size;
+    f = ceil(f / step_size) * step_size;
+
+    mat4 mat_light_ortho, mat_light_view_proj, mat_light_proj = {
          { 0.5f, 0.0f, 0.0f, 0 },
          { 0.0f, 0.5f, 0.0f, 0 },
          { 0.0f, 0.0f, 0.5f, 0 },
          { 0.5f, 0.5f, 0.5f, 1 }
     };
-    
-    glm_mat4_mul(mat_p, light_proj, mat_p);
-    glm_mat4_mul(mat_p, mat_v, state->uniforms.light_mat_vp);
+
+    glm_ortho(l, r, b, t, n, f, mat_light_ortho);
+    glm_mat4_mul(mat_light_proj, mat_light_ortho, mat_light_proj);
+    glm_mat4_mul(mat_light_proj, mat_light_view, mat_light_view_proj);
+
+    glm_mat4_copy(mat_light_view, u->light_mat_v);
+    glm_mat4_copy(mat_light_view_proj, u->light_mat_vp);
 }
 
 /* Compute uniform values for camera & light that are used across shaders */
@@ -101,13 +263,15 @@ void sokol_init_global_uniforms(
     glm_mat4_inv(state->uniforms.mat_p, state->uniforms.inv_mat_p);
 
     /* View + view * projection matrix */
-    glm_lookat(state->uniforms.eye_pos, state->uniforms.eye_lookat, state->uniforms.eye_up, state->uniforms.mat_v);
+    glm_lookat(state->uniforms.eye_pos, state->uniforms.eye_lookat, 
+        state->uniforms.eye_up, state->uniforms.mat_v);
 
     /* Flip x axis so -1 is on left and 1 is on right */
     vec3 flip_x = {-1, 1, 1};
     glm_scale(state->uniforms.mat_v, flip_x);
 
-    glm_mat4_mul(state->uniforms.mat_p, state->uniforms.mat_v, state->uniforms.mat_vp);
+    glm_mat4_mul(state->uniforms.mat_p, state->uniforms.mat_v, 
+        state->uniforms.mat_vp);
 
     /* Light parameters */
     if (state->light) {
@@ -176,8 +340,6 @@ void SokolRender(ecs_iter_t *it) {
     if (canvas->directional_light) {
         state.light = ecs_get(world, canvas->directional_light, 
             EcsDirectionalLight);
-        // sokol_init_light_mat_vp(&state);
-        // sokol_run_shadow_pass(&r->shadow_pass, &state);
     } else {
         /* Set default ambient light if nothing is configured */
         if (!state.ambient_light.r && !state.ambient_light.g && 
@@ -189,6 +351,12 @@ void SokolRender(ecs_iter_t *it) {
 
     /* Compute uniforms that are shared between passes */
     sokol_init_global_uniforms(&state);
+
+    /* Compute shadow parameters and run shadow pass */
+    if (canvas->directional_light) {
+        sokol_init_light_mat_vp(&state);
+        sokol_run_shadow_pass(&r->shadow_pass, &state);
+    }
 
     /* Depth prepass for more efficient drawing */
     sokol_run_depth_pass(&r->depth_pass, &state);
@@ -238,7 +406,8 @@ void SokolInitRenderer(ecs_iter_t *it) {
 
     sg_setup(&(sg_desc) {
         .context.depth_format = SG_PIXELFORMAT_NONE,
-        .buffer_pool_size = 16384
+        .buffer_pool_size = 16384,
+        .logger = slog_func
     });
 
     assert(sg_isvalid());

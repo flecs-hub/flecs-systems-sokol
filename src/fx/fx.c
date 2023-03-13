@@ -7,6 +7,7 @@ sokol_fx_resources_t* sokol_init_fx(
     result->hdr = sokol_init_hdr(w, h);
     result->fog = sokol_init_fog(w, h);
     result->ssao = sokol_init_ssao(w, h);
+    result->blend = sokol_init_blend(w, h);
     return result;
 }
 
@@ -18,4 +19,5 @@ void sokol_update_fx(
     sokol_fx_update_size(&fx->hdr, width, height);
     sokol_fx_update_size(&fx->fog, width, height);
     sokol_fx_update_size(&fx->ssao, width, height);
+    sokol_fx_update_size(&fx->blend, width, height);
 }

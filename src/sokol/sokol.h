@@ -24,10 +24,13 @@
 #define SOKOL_SHADER_PRECISION "precision highp float;\n"
 #endif
 
-#ifdef NDEBUG
-#define SOKOL_ASSERT(c)
-#endif
+#define SOKOL_DEBUG
+
+// #ifdef NDEBUG
+// #define SOKOL_ASSERT(c)
+// #endif
 
 #include "sokol_gfx.h"
 #include "sokol_app.h"
+#include "sokol_log.h"
 #include "sokol_glue.h"
