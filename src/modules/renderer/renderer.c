@@ -21,32 +21,6 @@ sokol_resources_t sokol_init_resources(void) {
     };
 }
 
-
-    // mat4 mat_p;
-    // mat4 mat_v;
-    // vec3 lookat = {0.0, 0.0, 0.0};
-    // vec3 up = {0, 1, 0};
-
-    // glm_ortho(-50, 50, -50, 50, 1, 200, mat_p);
-
-    // vec4 dir = {
-    //     state->light->direction[0],
-    //     state->light->direction[1],
-    //     state->light->direction[2]
-    // };
-    // glm_vec4_scale(dir, 1.0, dir);
-    // glm_lookat(dir, lookat, up, mat_v);
-
-    // mat4 light_proj = {
-    //      { 0.5f, 0.0f, 0.0f, 0 },
-    //      { 0.0f, 0.5f, 0.0f, 0 },
-    //      { 0.0f, 0.0f, 0.5f, 0 },
-    //      { 0.5f, 0.5f, 0.5f, 1 }
-    // };
-    
-    // glm_mat4_mul(mat_p, light_proj, mat_p);
-    // glm_mat4_mul(mat_p, mat_v, state->uniforms.light_mat_vp);
-
 typedef struct {
     // far plane
     vec3 c_far;  // center
@@ -407,7 +381,7 @@ void SokolInitRenderer(ecs_iter_t *it) {
     sg_setup(&(sg_desc) {
         .context.depth_format = SG_PIXELFORMAT_NONE,
         .buffer_pool_size = 16384,
-        .logger = slog_func
+        .logger = { slog_func }
     });
 
     assert(sg_isvalid());

@@ -30,7 +30,6 @@ static const char *shd_f =
     "void main() {\n"
     "  float depth = proj_zw.x / proj_zw.y;\n"
     "  frag_color = encodeDepth(depth);\n"
-    // "  frag_color = vec4(depth, depth, depth, 0);"
     "}\n";
 
 sokol_offscreen_pass_t sokol_init_shadow_pass(
