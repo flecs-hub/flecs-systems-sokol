@@ -1,5 +1,5 @@
 # flecs-systems-sokol
-Sokol based rendering module for [Flecs](https://github.com/SanderMertens/flecs).
+Sokol based rendering module for [Flecs](https://github.com/SanderMertens/flecs). This renderer should only be used as example code or for demonstration purposes and is not intended or ready for production.
 
 ## Features
 - Runs on webasm, macOS, Linux, Windows
@@ -28,11 +28,14 @@ Sokol based rendering module for [Flecs](https://github.com/SanderMertens/flecs)
 - Textures
 
 ## Examples
-https://flecs.dev/playground
+[Playground](https://www.flecs.dev/explorer/?wasm=https://www.flecs.dev/explorer/playground.js)
 
-<img width="849" alt="Screen Shot 2021-12-31 at 5 32 13 PM" src="https://user-images.githubusercontent.com/9919222/147842293-b60c20ef-c2b0-4cb9-99a4-d170bb3fc7e5.png">
+![image](https://user-images.githubusercontent.com/9919222/226444497-7dd79478-8346-436e-8c89-eaf4ef52bdd7.png)
 
-https://flecs.dev/city
+[City demo](https://flecs.dev/city)
 
-<img width="845" alt="Screen Shot 2021-12-31 at 5 07 13 PM" src="https://user-images.githubusercontent.com/9919222/147842280-c5bb855e-0c2b-47d2-942d-af629663a731.png">
+<img width="1379" alt="Screen Shot 2023-03-20 at 12 25 03 PM" src="https://user-images.githubusercontent.com/9919222/226445050-8db1b453-9518-4418-9a48-f02115599c23.png">
 
+[Tower defense demo](https://www.flecs.dev/tower_defense/etc/)
+
+<img width="1398" alt="Screen Shot 2023-03-20 at 12 15 08 PM" src="https://user-images.githubusercontent.com/9919222/226444789-e9afab75-ee04-4db9-be39-39902707bbf6.png">
