@@ -23,10 +23,8 @@ char* fx_build_shader(
     /* Add fx header */
     ecs_strbuf_appendstr(&shad, 
         SOKOL_SHADER_HEADER
-        "#define PI 3.1415926535897932384626433832795\n"
-        "#define PI2 (2.0 * PI)\n"
-        "#define EPSILON 1e-6f\n"
-
+        "#include \"etc/sokol/shaders/constants.glsl\"\n"
+        "#define FX\n"
         "out vec4 frag_color;\n"
         "in vec2 uv;\n"
         "uniform float u_t;\n"
@@ -69,7 +67,10 @@ char* fx_build_shader(
     ecs_strbuf_append(&shad, pass->shader);
     ecs_strbuf_append(&shad, "}\n");
 
-    return ecs_strbuf_get(&shad);
+    char *shader = ecs_strbuf_get(&shad);
+    char *shader_pp = sokol_shader_from_str(shader);
+    ecs_os_free(shader);
+    return shader_pp;
 }
 
 int sokol_fx_add_pass(

@@ -48,7 +48,7 @@ void sokol_run_screen_pass(
     sokol_screen_pass_t *pass,
     sokol_resources_t *resources,
     sokol_render_state_t *state,
-    sg_image target)
+    sg_image img)
 {
     sg_begin_default_pass(&pass->pass_action, state->width, state->height);
     sg_apply_pipeline(pass->pip);
@@ -57,7 +57,7 @@ void sokol_run_screen_pass(
         .vertex_buffers = { 
             [0] = resources->quad 
         },
-        .fs_images[0] = target
+        .fs_images[0] = img
     };
 
     sg_apply_bindings(&bind);

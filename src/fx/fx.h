@@ -78,7 +78,8 @@ void sokol_fog_set_params(
     float r,
     float g,
     float b,
-    float density);
+    float density,
+    float uv_horizon);
 
 sokol_fx_resources_t* sokol_init_fx(
     int width, 

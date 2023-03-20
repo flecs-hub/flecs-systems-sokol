@@ -2,23 +2,15 @@
 
 static
 const char *shd_fog_header = 
-    SOKOL_SHADER_FUNC_RGBA_TO_FLOAT
-    SOKOL_SHADER_FUNC_RGBA_TO_DEPTH
-    SOKOL_SHADER_FUNC_RGBA_TO_DEPTH_LOG
-    ;
+    "#include \"etc/sokol/shaders/fx_fog_header.glsl\"\n";
 
 static
 const char *shd_fog =
-    "#define LOG2 1.442695\n"
-    "vec4 c = texture(hdr, uv);\n"
-    "float d = (rgba_to_depth(texture(depth, uv)) / u_far);\n"
-    "vec4 fog_color = vec4(u_r, u_g, u_b, 1.0);\n"
-    "float intensity = 1.0 - exp2(-(d * d) * u_density * u_density * LOG2);\n"
-    "frag_color = mix(c, fog_color, intensity);\n"
-    ;
+    "#include \"etc/sokol/shaders/fx_fog_main.glsl\"\n";
 
 #define FOG_INPUT_HDR SOKOL_FX_INPUT(0)
 #define FOG_INPUT_DEPTH SOKOL_FX_INPUT(1)
+#define FOG_INPUT_ATMOS SOKOL_FX_INPUT(2)
 
 SokolFx sokol_init_fog(
     int width, int height)
@@ -38,11 +30,11 @@ SokolFx sokol_init_fog(
         .shader = shd_fog,
         .color_format = SG_PIXELFORMAT_RGBA16F,
         .mipmap_count = 2,
-        .inputs = { "hdr", "depth" },
-        .params = { "u_density", "u_r", "u_g", "u_b" },
+        .inputs = { "hdr", "depth", "atmos" },
+        .params = { "u_density", "u_r", "u_g", "u_b", "u_horizon" },
         .steps = {
             [0] = {
-                .inputs = { {FOG_INPUT_HDR}, {FOG_INPUT_DEPTH} },
+                .inputs = { {FOG_INPUT_HDR}, {FOG_INPUT_DEPTH}, {FOG_INPUT_ATMOS} },
                 .params = { 1.2, 0.0, 0.0, 0.0 }
             }
         }
@@ -58,11 +50,13 @@ void sokol_fog_set_params(
     float density,
     float r,
     float g,
-    float b)
+    float b,
+    float uv_horizon)
 {
     float *params = fx->pass[0].steps[0].params;
     params[0] = density;
     params[1] = r;
     params[2] = g;
     params[3] = b;
+    params[4] = uv_horizon;
 }

@@ -30,7 +30,8 @@
             "ldflags": ["-s USE_WEBGL2=1"],
             "${cfg debug}": {
                 "ldflags": ["-s GL_DEBUG=1"]
-            }
+            },
+            "embed": ["etc/sokol/shaders"]
         }
     } 
 }

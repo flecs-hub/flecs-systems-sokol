@@ -39,17 +39,22 @@ typedef struct sokol_global_uniforms_t {
     mat4 mat_p;
     mat4 mat_vp;
     mat4 inv_mat_p;
+    mat4 inv_mat_v;
     
     mat4 light_mat_v;
     mat4 light_mat_vp;
 
     vec3 light_ambient;
-    vec3 light_direction;
-    vec3 light_color;
-    
+    vec3 sun_direction;
+    vec3 sun_color;
+    vec3 sun_screen_pos;
+    float sun_intensity;
+
     vec3 eye_pos;
     vec3 eye_up;
     vec3 eye_lookat;
+    vec3 eye_dir;
+    vec3 eye_horizon;
 
     float t;
     float dt;
@@ -57,6 +62,8 @@ typedef struct sokol_global_uniforms_t {
     float near_;
     float far_;
     float fov;
+    float shadow_near;
+    float shadow_far;
     bool ortho;
 
     float shadow_map_size;
@@ -69,6 +76,7 @@ typedef struct sokol_render_state_t {
     
     const EcsDirectionalLight *light;
     const EcsCamera *camera;
+    const EcsAtmosphere *atmosphere;
 
     ecs_rgb_t ambient_light;
     int32_t width;
@@ -76,6 +84,7 @@ typedef struct sokol_render_state_t {
 
     sokol_resources_t *resources;
     sokol_global_uniforms_t uniforms;
+    sg_image atmos;
     sg_image shadow_map;
 } sokol_render_state_t;
 
@@ -83,6 +92,7 @@ typedef struct sokol_offscreen_pass_t {
     sg_pass_action pass_action;
     sg_pass pass;
     sg_pipeline pip;
+    sg_pipeline pip_2;
     sg_image depth_target;
     sg_image color_target;
     int32_t sample_count;
@@ -135,7 +145,7 @@ void sokol_update_scene_pass(
     sokol_offscreen_pass_t *pass,
     int32_t w,
     int32_t h,
-    sokol_offscreen_pass_t *depth_pass_out);
+    sokol_offscreen_pass_t *depth_pass);
 
 /* Screen pass */
 sokol_screen_pass_t sokol_init_screen_pass(void);
@@ -145,5 +155,19 @@ void sokol_run_screen_pass(
     sokol_resources_t *resources,
     sokol_render_state_t *state,
     sg_image target);
+
+/* Atmosphere pass */
+sokol_offscreen_pass_t sokol_init_atmos_pass(void);
+
+void sokol_run_atmos_pass(
+    sokol_offscreen_pass_t *pass,
+    sokol_render_state_t *state);
+
+/* Atmosphere to screen pass */
+sokol_offscreen_pass_t sokol_init_atmos_to_scene_pass(void);
+
+void sokol_run_atmos_to_screen_pass(
+    sokol_offscreen_pass_t *pass,
+    sokol_render_state_t *state);
 
 #endif

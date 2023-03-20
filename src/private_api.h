@@ -11,4 +11,10 @@ void sokol_run_scene_pass(
     sokol_offscreen_pass_t *pass,
     sokol_render_state_t *state);
 
+char* sokol_shader_from_file(
+    const char *filename);
+
+char* sokol_shader_from_str(
+    const char *str);
+
 #endif

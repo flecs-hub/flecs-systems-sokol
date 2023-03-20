@@ -14,7 +14,16 @@ typedef struct scene_fs_uniforms_t {
     vec3 light_color;
     vec3 eye_pos;
     float shadow_map_size;
+    float shadow_far;
 } scene_fs_uniforms_t;
+
+typedef struct scene_fs_sun_atmos_uniforms_t {
+    vec3 sun_screen_pos;
+    vec3 sun_color;
+    vec2 target_size;
+    float aspect;
+    float sun_intensity;
+} scene_fs_sun_atmos_uniforms_t;
 
 #define POSITION_I 0
 #define NORMAL_I 1
@@ -25,6 +34,24 @@ typedef struct scene_fs_uniforms_t {
 #define LAYOUT(loc) "layout(location=" LAYOUT_I_STR(loc) ") "
 
 sg_pipeline init_scene_pipeline(int32_t sample_count) {
+    char *vs = sokol_shader_from_str(
+        SOKOL_SHADER_HEADER
+        "uniform mat4 u_mat_vp;\n"
+        "uniform mat4 u_mat_v;\n"
+        "uniform mat4 u_light_vp;\n"
+        LAYOUT(POSITION_I)  "in vec3 v_position;\n"
+        LAYOUT(NORMAL_I)    "in vec3 v_normal;\n"
+        LAYOUT(COLOR_I)     "in vec3 i_color;\n"
+        LAYOUT(MATERIAL_I)  "in vec3 i_material;\n"
+        LAYOUT(TRANSFORM_I) "in mat4 i_mat_m;\n"
+        "#include \"etc/sokol/shaders/scene_vert.glsl\"\n"
+    );
+
+    char *fs = sokol_shader_from_str(
+        SOKOL_SHADER_HEADER
+        "#include \"etc/sokol/shaders/scene_frag.glsl\"\n"
+    );
+
     /* create an instancing shader */
     sg_shader shd = sg_make_shader(&(sg_shader_desc){
         .vs.uniform_blocks = {
@@ -34,7 +61,7 @@ sg_pipeline init_scene_pipeline(int32_t sample_count) {
                     [0] = { .name="u_mat_v", .type=SG_UNIFORMTYPE_MAT4 },
                     [1] = { .name="u_mat_vp", .type=SG_UNIFORMTYPE_MAT4 },
                     [2] = { .name="u_light_vp", .type=SG_UNIFORMTYPE_MAT4 },
-                    [3] = { .name="dummy", .type=SG_UNIFORMTYPE_FLOAT2 },
+                    [3] = { .name="padding", .type=SG_UNIFORMTYPE_FLOAT2 },
                     [4] = { .name="u_near", .type=SG_UNIFORMTYPE_FLOAT },
                     [5] = { .name="u_far", .type=SG_UNIFORMTYPE_FLOAT }
                 },
@@ -55,119 +82,19 @@ sg_pipeline init_scene_pipeline(int32_t sample_count) {
                         [1] = { .name="u_light_direction", .type=SG_UNIFORMTYPE_FLOAT3 },
                         [2] = { .name="u_light_color", .type=SG_UNIFORMTYPE_FLOAT3 },
                         [3] = { .name="u_eye_pos", .type=SG_UNIFORMTYPE_FLOAT3 },
-                        [4] = { .name="u_shadow_map_size", .type=SG_UNIFORMTYPE_FLOAT }
+                        [4] = { .name="u_shadow_map_size", .type=SG_UNIFORMTYPE_FLOAT },
+                        [5] = { .name="u_shadow_far", .type=SG_UNIFORMTYPE_FLOAT }
                     }
                 }
             }
         },
 
-        .vs.source =
-            SOKOL_SHADER_HEADER
-            "uniform mat4 u_mat_vp;\n"
-            "uniform mat4 u_mat_v;\n"
-            "uniform mat4 u_light_vp;\n"
-            LAYOUT(POSITION_I)  "in vec3 v_position;\n"
-            LAYOUT(NORMAL_I)    "in vec3 v_normal;\n"
-            LAYOUT(COLOR_I)     "in vec3 i_color;\n"
-            LAYOUT(MATERIAL_I)  "in vec3 i_material;\n"
-            LAYOUT(TRANSFORM_I) "in mat4 i_mat_m;\n"
-            "out vec4 position;\n"
-            "out vec4 light_position;\n"
-            "out vec3 normal;\n"
-            "out vec4 color;\n"
-            "out vec3 material;\n"
-            "void main() {\n"
-            "  vec4 pos4 = vec4(v_position, 1.0);\n"
-            "  gl_Position = u_mat_vp * i_mat_m * pos4;\n"
-            "  light_position = u_light_vp * i_mat_m * pos4;\n"
-            "  position = (i_mat_m * pos4);\n"
-            "  normal = (i_mat_m * vec4(v_normal, 0.0)).xyz;\n"
-            "  color = vec4(i_color, 0.0);\n"
-            "  material = i_material;\n"
-            "}\n",
-
-        .fs.source =
-            SOKOL_SHADER_HEADER
-            "uniform mat4 u_light_vp;\n"
-            "uniform vec3 u_light_ambient;\n"
-            "uniform vec3 u_light_direction;\n"
-            "uniform vec3 u_light_color;\n"
-            "uniform vec3 u_eye_pos;\n"
-            "uniform float u_shadow_map_size;\n"
-            "uniform sampler2D shadow_map;\n"
-            "in vec4 position;\n"
-            "in vec4 light_position;\n"
-            "in vec3 normal;\n"
-            "in vec4 color;\n"
-            "in vec3 material;\n"
-            "out vec4 frag_color;\n"
-
-            "const int pcf_count = 2;\n"
-            "const int pcf_samples = (2 * pcf_count + 1) * (2 * pcf_count + 1);\n"
-            "const float texel_c = 1.0;\n"
-
-            "float decodeDepth(vec4 rgba) {\n"
-            "    return dot(rgba, vec4(1.0, 1.0/255.0, 1.0/65025.0, 1.0/160581375.0));\n"
-            "}\n"
-
-            "float sampleShadow(sampler2D shadowMap, vec2 uv, float compare) {\n"
-            "    float depth = decodeDepth(texture(shadowMap, vec2(uv.x, uv.y)));\n"
-            "    if (depth >= 1.0) return 1.0;"
-            "    depth += 0.003;\n"
-            "    return step(compare, depth);\n"
-            "}\n"
-
-            "float sampleShadowPCF(sampler2D shadowMap, vec2 uv, float texel_size, float compare) {\n"
-            "    float result = 0.0;\n"
-            ""
-            "    if (uv.x < 0.0 || uv.x > 1.0) {"
-            "      return 1.0;"
-            "    }"
-            "    if (uv.y < 0.0 || uv.y > 1.0) {"
-            "      return 1.0;"
-            "    }"
-            ""
-            "    for (int x = -pcf_count; x <= pcf_count; x++) {\n"
-            "        for (int y = -pcf_count; y <= pcf_count; y++) {\n"
-            "            result += sampleShadow(shadowMap, uv + vec2(x, y) * texel_size * texel_c, compare);\n"
-            "        }\n"
-            "    }\n"
-            "    return result / float(pcf_samples);\n"
-            "}\n"
-
-            "void main() {\n"
-            "  float specular_power = material.x;\n"
-            "  float shininess = max(material.y, 1.0);\n"
-            "  float emissive = material.z;\n"
-
-            "  vec3 l = normalize(u_light_direction);\n"
-            "  vec3 n = normalize(normal);\n"
-            "  float n_dot_l = dot(n, l);\n"
-
-            "  if (n_dot_l >= 0.0) {"
-            "    vec3 v = normalize(u_eye_pos - position.xyz);\n"
-            "    vec3 r = reflect(-l, n);\n"
-
-            "    vec3 light_pos = light_position.xyz / light_position.w;\n"
-            "    vec2 sm_uv = (light_pos.xy + 1.0) * 0.5;\n"
-            "    float depth = light_position.z;\n"
-            "    float texel_size = 1.0 / u_shadow_map_size;\n"
-            "    float s = sampleShadowPCF(shadow_map, sm_uv, texel_size, depth);\n"
-            "    s = max(s, emissive);\n"
-
-            "    float r_dot_v = max(dot(r, v), 0.0);\n"
-            "    float l_shiny = pow(r_dot_v * n_dot_l, shininess);\n"
-            "    vec3 l_specular = vec3(specular_power * l_shiny * u_light_color);\n"
-            "    vec3 l_diffuse = vec3(u_light_color) * n_dot_l;\n"
-            "    vec3 l_light = (u_light_ambient + s * l_diffuse);\n"
-
-            "    frag_color = vec4(max(vec3(emissive), l_light) * color.xyz + s * l_specular, 1.0);\n"
-            "  } else {\n"
-            "    vec3 light = emissive + clamp(1.0 - emissive, 0.0, 1.0) * (u_light_ambient);\n"
-            "    frag_color = vec4(light * color.xyz, 1.0);\n"
-            "  }\n"
-            "}\n"
+        .vs.source = vs,
+        .fs.source = fs
     });
+
+    ecs_os_free(vs);
+    ecs_os_free(fs);
 
     return sg_make_pipeline(&(sg_pipeline_desc){
         .shader = shd,
@@ -209,8 +136,71 @@ sg_pipeline init_scene_pipeline(int32_t sample_count) {
         }},
 
         .cull_mode = SG_CULLMODE_BACK,
-
         .sample_count = sample_count
+    });
+}
+
+sg_pipeline init_scene_atmos_sun_pipeline(int32_t sample_count) {
+    char *fs = sokol_shader_from_str(
+        SOKOL_SHADER_HEADER
+        "#include \"etc/sokol/shaders/scene_atmos_sun.frag\"\n"
+    );
+
+    sg_shader shd = sg_make_shader(&(sg_shader_desc){
+        .vs.source = 
+             SOKOL_SHADER_HEADER
+            "layout(location=0) in vec4 v_position;\n"
+            "layout(location=1) in vec2 v_uv;\n"
+            "out vec2 uv;\n"
+            "void main() {\n"
+            "  gl_Position = v_position;\n"
+            "  gl_Position.z = 1.0;\n"
+            "  uv = v_uv;\n"
+            "}\n",
+
+        .fs = {
+            .source = fs,
+            .uniform_blocks = {
+                [0] = {
+                    .size = sizeof(scene_fs_sun_atmos_uniforms_t),
+                    .uniforms = {
+                        [0] = { .name="u_sun_screen_pos", .type=SG_UNIFORMTYPE_FLOAT3 },
+                        [1] = { .name="u_sun_color", .type=SG_UNIFORMTYPE_FLOAT3 },
+                        [2] = { .name="u_target_size", .type=SG_UNIFORMTYPE_FLOAT2 },
+                        [3] = { .name="u_aspect", .type=SG_UNIFORMTYPE_FLOAT },
+                        [4] = { .name="u_sun_intensity", .type=SG_UNIFORMTYPE_FLOAT }
+                    }
+                }
+            },
+            .images[0] = {
+                .name = "atmos",
+                .image_type = SG_IMAGETYPE_2D
+            }
+        }
+    });
+
+    ecs_os_free(fs);
+
+    /* create a pipeline object (default render state is fine) */
+    return sg_make_pipeline(&(sg_pipeline_desc){
+        .shader = shd,
+        .layout = {         
+            .attrs = {
+                /* Static geometry (position, uv) */
+                [0] = { .buffer_index=0, .format=SG_VERTEXFORMAT_FLOAT3 },
+                [1] = { .buffer_index=0, .format=SG_VERTEXFORMAT_FLOAT2 }
+            }
+        },
+
+        .depth = {
+            .pixel_format = SG_PIXELFORMAT_DEPTH,
+            .compare = SG_COMPAREFUNC_LESS_EQUAL,
+            .write_enabled = false
+        },
+
+        .colors = {{
+            .pixel_format = SG_PIXELFORMAT_RGBA16F
+        }},
     });
 }
 
@@ -248,6 +238,7 @@ sokol_offscreen_pass_t sokol_init_scene_pass(
 
     pass.pass_action = sokol_clear_action(background_color, true, false);
     pass.pip = init_scene_pipeline(sample_count);
+    pass.pip_2 = init_scene_atmos_sun_pipeline(sample_count);
     pass.sample_count = sample_count;
 
     ecs_trace("sokol: initialize scene pipeline");
@@ -268,6 +259,21 @@ void sokol_update_scene_pass(
     update_scene_pass(pass, w, h, pass->sample_count);
     sokol_update_depth_pass(depth_pass, w, h, 
         pass->depth_target, pass->sample_count);
+}
+
+static
+void scene_draw_atmos(
+    sokol_render_state_t *state)
+{
+    sg_bindings bind = {
+        .vertex_buffers = { 
+            [0] = state->resources->quad 
+        },
+        .fs_images[0] = state->atmos
+    };
+
+    sg_apply_bindings(&bind);
+    sg_draw(0, 6, 1);
 }
 
 static
@@ -309,15 +315,34 @@ void sokol_run_scene_pass(
 
     scene_fs_uniforms_t fs_u;
     glm_vec3_copy(state->uniforms.light_ambient, fs_u.light_ambient);
-    glm_vec3_copy(state->uniforms.light_direction, fs_u.light_direction);
-    glm_vec3_copy(state->uniforms.light_color, fs_u.light_color);
+    glm_vec3_copy(state->uniforms.sun_direction, fs_u.light_direction);
+    glm_vec3_copy(state->uniforms.sun_color, fs_u.light_color);
+    glm_vec3_scale(fs_u.light_color, state->uniforms.sun_intensity, fs_u.light_color);
     glm_vec3_copy(state->uniforms.eye_pos, fs_u.eye_pos);
     fs_u.shadow_map_size = state->uniforms.shadow_map_size;
+    fs_u.shadow_far = state->uniforms.shadow_far;
+    fs_u.eye_pos[0] *= -1;
+
+    scene_fs_sun_atmos_uniforms_t fs_sun_atmos_u;
+    glm_vec3_copy(state->uniforms.sun_screen_pos, fs_sun_atmos_u.sun_screen_pos);
+    glm_vec3_copy(state->uniforms.sun_color, fs_sun_atmos_u.sun_color);
+    fs_sun_atmos_u.target_size[0] = state->width;
+    fs_sun_atmos_u.target_size[1] = state->height;
+    fs_sun_atmos_u.aspect = state->uniforms.aspect;
+    fs_sun_atmos_u.sun_intensity = 1.0 + state->uniforms.sun_intensity * 6;
 
     /* Render to offscreen texture so screen-space effects can be applied */
     sg_begin_pass(pass->pass, &pass->pass_action);
-    sg_apply_pipeline(pass->pip);
 
+    /* Step 1: render atmosphere background */
+    if (state->atmosphere) {
+        sg_apply_pipeline(pass->pip_2);
+        sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &(sg_range){&fs_sun_atmos_u, sizeof(scene_fs_sun_atmos_uniforms_t)});
+        scene_draw_atmos(state);
+    }
+
+    /* Step 2: render scene */
+    sg_apply_pipeline(pass->pip);
     sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &(sg_range){&vs_u, sizeof(scene_vs_uniforms_t)});
     sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &(sg_range){&fs_u, sizeof(scene_fs_uniforms_t)});
 

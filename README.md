@@ -2,18 +2,30 @@
 Sokol based rendering module for [Flecs](https://github.com/SanderMertens/flecs).
 
 ## Features
-- Runs on webasm, macOS, Linux
+- Runs on webasm, macOS, Linux, Windows
+- Box & Rectangle primitives
 - Automatic instancing
 - Phong shading model
-- Directional & ambient light
+- Directional (sun) light
+- Ambient light
 - Emissive & shiny materials
 - Depth prepass
-- Shadows (work in progress)
-- Post process effect framework with
+- Shadow mapping
+- Atmosphere rendering
+- Post process effects:
   - Exponential fog
   - Ambient occlusion
   - Bloom
   - HDR & gamma correction
+
+## Future work
+- Cascading shadow maps
+- Exponential height fog
+- PBR
+- Lights (spot/omni, multiple lights)
+- More primitive shapes
+- Meshes
+- Textures
 
 ## Examples
 https://flecs.dev/playground

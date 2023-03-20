@@ -1,146 +1,20 @@
 #include "../private_api.h"
 
-// Based on https://threejs.org/examples/webgl_postprocessing_sao.html
-
 static
 const char *shd_ssao_header = 
-    // Increase/decrease to trade quality for performance
-    "#define NUM_SAMPLES 8\n"
-    // The sample kernel uses a spiral pattern so most samples are concentrated
-    // close to the center. 
-    "#define NUM_RINGS 3\n"
-    "#define KERNEL_RADIUS 15.0\n"
-    // Misc params, tweaked to match the renderer
-    "#define BIAS 0.2\n"
-    "#define SCALE 1.0\n"
-    // Derived constants
-    "#define ANGLE_STEP ((PI2 * float(NUM_RINGS)) / float(NUM_SAMPLES))\n"
-    "#define INV_NUM_SAMPLES (1.0 / float(NUM_SAMPLES))\n"
-    "#define INV_NUM_SAMPLES (1.0 / float(NUM_SAMPLES))\n"
-
-    SOKOL_SHADER_FUNC_FLOAT_TO_RGBA
-    SOKOL_SHADER_FUNC_RGBA_TO_FLOAT
-    SOKOL_SHADER_FUNC_RGBA_TO_DEPTH
-    SOKOL_SHADER_FUNC_POW2
-
-    "highp float rand( const in vec2 uv ) {\n"
-    "    const highp float a = 12.9898, b = 78.233, c = 43758.5453;\n"
-    "    highp float dt = dot( uv.xy, vec2( a,b ) ), sn = mod( dt, PI );\n"
-    "    return fract( sin( sn ) * c );\n"
-    "}\n"
-
-    "float getDepth(const in vec2 t_uv) {\n"
-    "    return rgba_to_depth(texture(t_depth, t_uv));\n"
-    "}\n"
-
-    "float getViewZ(const in float depth) {\n"
-    "    return (u_near * u_far) / (depth - u_far);\n"
-    "}\n"
-
-    // Compute position in world space from depth & projection matrix
-    "vec3 getViewPosition( const in vec2 screenPosition, const in float depth, const in float viewZ ) {\n"
-    "    float clipW = u_mat_p[2][3] * viewZ + u_mat_p[3][3];\n"
-    "    vec4 clipPosition = vec4( ( vec3( screenPosition, depth ) - 0.5 ) * 2.0, 1.0 );\n"
-    "    clipPosition *= clipW; // unprojection.\n"
-    "    return ( u_inv_mat_p * clipPosition ).xyz;\n"
-    "}\n"
-
-    // Compute normal from derived position. Should at some point replace it
-    // with reading from a normal buffer so it works correctly with smooth
-    // shading / normal maps.
-    "vec3 getViewNormal( const in vec3 viewPosition, const in vec2 t_uv ) {\n"
-    "    return normalize( cross( dFdx( viewPosition ), dFdy( viewPosition ) ) );\n"
-    "}\n"
-
-    "float scaleDividedByCameraFar;\n"
-
-    // Compute occlusion of single sample
-    "float getOcclusion( const in vec3 centerViewPosition, const in vec3 centerViewNormal, const in vec3 sampleViewPosition ) {\n"
-    "    vec3 viewDelta = sampleViewPosition - centerViewPosition;\n"
-    "    float viewDistance = length( viewDelta );\n"
-    "    float scaledScreenDistance = scaleDividedByCameraFar * viewDistance;\n"
-    "    float n_dot_d = dot(centerViewNormal, viewDelta);\n"
-    "    float scaled_n_dot_d = max(0.0, n_dot_d / scaledScreenDistance - BIAS);\n"
-    "    float result = scaled_n_dot_d / (1.0 + pow2(scaledScreenDistance));\n"
-
-    // Strip off values that are too large which eliminates shadowing objects
-    // that are far away.
-    "    if (result > 220.0) {\n"
-    "      result = 0.0;\n"
-    "    }\n"
-
-    // Squash the range and offset noise.
-    "    return max(0.0, clamp(result, 1.1, 20.0) / 13.0 - 0.2);\n"
-    "}\n"
-
-    "float getAmbientOcclusion( const in vec3 centerViewPosition, float centerDepth ) {\n"
-    "  scaleDividedByCameraFar = SCALE / u_far;\n"
-    "  vec3 centerViewNormal = getViewNormal( centerViewPosition, uv );\n"
-    
-    "  float angle = rand( uv ) * PI2;\n"
-    "  vec2 radius = vec2( KERNEL_RADIUS * INV_NUM_SAMPLES );\n"
-
-    // Use smaller kernels for objects farther away from the camera
-    "  radius /= u_target_size * centerDepth * 0.05;\n"
-    // Make sure tha the sample radius isn't less than a single texel, as this
-    // introduces noise
-    "  radius = max(radius, 5.0 / u_target_size);\n"
-    
-    "  vec2 radiusStep = radius;\n"
-    "  float occlusionSum = 0.0;\n"
-
-    // Collect occlusion samples
-    "  for( int i = 0; i < NUM_SAMPLES; i ++ ) {\n"
-    "    vec2 sampleUv = uv + vec2( cos( angle ), sin( angle ) ) * radius;\n"
-
-    //   Don't sample outside of texture coords to prevent edge artifacts
-    "    sampleUv = clamp(sampleUv, EPSILON, 1.0 - EPSILON);\n"
-
-    "    radius += radiusStep;\n"
-    "    angle += ANGLE_STEP;\n"
-
-    "    float sampleDepth = getDepth( sampleUv );\n"
-    "    float sampleDepthNorm = sampleDepth / u_far;\n"
-
-    "    float sampleViewZ = getViewZ( sampleDepth );\n"
-    "    vec3 sampleViewPosition = getViewPosition( sampleUv, sampleDepthNorm, sampleViewZ );\n"
-    "    occlusionSum += getOcclusion( centerViewPosition, centerViewNormal, sampleViewPosition );\n"
-    "  }\n"
-
-    "  return occlusionSum * (1.0 / (float(NUM_SAMPLES)));\n"
-    "}\n"
-    ;
+    "#include \"etc/sokol/shaders/fx_ssao_header.glsl\"\n";
 
 static
 const char *shd_ssao =
-    // Depth (range = 0 .. u_far)
-    "float centerDepth = getDepth( uv );\n"
-    // Depth (range = 0 .. 1)
-    "float centerDepthNorm = centerDepth / u_far;\n"
-
-    "float centerViewZ = getViewZ( centerDepth );\n"
-    "vec3 viewPosition = getViewPosition( uv, centerDepthNorm, centerViewZ );\n"
-    "float ambientOcclusion = getAmbientOcclusion( viewPosition, centerDepth );\n"
-
-    // Store value as rgba to increase precision
-    "float max_dist = 0.1;\n"
-    "float mult = 1.0 / max_dist;\n"
-    "frag_color = float_to_rgba(ambientOcclusion) * max(0.0, max_dist - centerDepthNorm) * mult;\n"
-    // "frag_color = vec4(centerDepthNorm, centerDepthNorm, centerDepthNorm, 0);\n"
-    // "frag_color = vec4(0, 0, 0, 0);\n"
-    ;
+    "#include \"etc/sokol/shaders/fx_ssao_main.glsl\"\n";
 
 static
 const char *shd_blend_mult_header = 
-    SOKOL_SHADER_FUNC_RGBA_TO_FLOAT
-    ;
+    "#include \"etc/sokol/shaders/common.glsl\"\n";
 
 static
 const char *shd_blend_mult =
-    "float ambientOcclusion = rgba_to_float(texture(t_occlusion, uv));\n"
-    // "frag_color = vec4(ambientOcclusion, ambientOcclusion, ambientOcclusion, 1.0);\n"
-    "frag_color = (1.0 - ambientOcclusion) * texture(t_scene, uv);\n"
-    ;
+    "#include \"etc/sokol/shaders/fx_ssao_blend.glsl\"\n";
 
 #define SSAO_INPUT_SCENE SOKOL_FX_INPUT(0)
 #define SSAO_INPUT_DEPTH SOKOL_FX_INPUT(1)
@@ -151,12 +25,6 @@ SokolFx sokol_init_ssao(
     ecs_trace("sokol: initialize ambient occlusion effect");
     ecs_log_push();
 
-#ifdef __EMSCRIPTEN__
-    float factor = 2.0;
-#else
-    float factor = 1.0;
-#endif
-
     SokolFx fx = {0};
     fx.name = "AmbientOcclusion";
     fx.width = width;
@@ -165,7 +33,7 @@ SokolFx sokol_init_ssao(
     // Ambient occlusion shader 
     int32_t ao = sokol_fx_add_pass(&fx, &(sokol_fx_pass_desc_t){
         .name = "ssao",
-        .outputs = {{ .global_size = true, .factor = factor }},
+        .outputs = {{ .global_size = true, .factor = 0.5 }},
         .shader_header = shd_ssao_header,
         .shader = shd_ssao,
         .color_format = SG_PIXELFORMAT_RGBA8,
@@ -180,7 +48,7 @@ SokolFx sokol_init_ssao(
     // Blur to reduce the noise, so we can keep sample count low
     int blur = sokol_fx_add_pass(&fx, &(sokol_fx_pass_desc_t){
         .name = "blur",
-        .outputs = {{1024}},
+        .outputs = {{512}},
         .shader_header = shd_blur_hdr,
         .shader = shd_blur,
         .color_format = SG_PIXELFORMAT_RGBA8,
