@@ -32,6 +32,7 @@ typedef struct sokol_resources_t {
     sg_buffer box_normals;
 
     sg_image noise_texture;
+    sg_image bg_texture;
 } sokol_resources_t;
 
 typedef struct sokol_global_uniforms_t {

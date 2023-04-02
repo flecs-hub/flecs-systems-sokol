@@ -236,7 +236,7 @@ sokol_offscreen_pass_t sokol_init_scene_pass(
     *depth_pass_out = sokol_init_depth_pass(w, h, 
         pass.depth_target, sample_count);
 
-    pass.pass_action = sokol_clear_action(background_color, true, false);
+    pass.pass_action = sokol_clear_action(background_color, false, false);
     pass.pip = init_scene_pipeline(sample_count);
     pass.pip_2 = init_scene_atmos_sun_pipeline(sample_count);
     pass.sample_count = sample_count;
@@ -335,11 +335,9 @@ void sokol_run_scene_pass(
     sg_begin_pass(pass->pass, &pass->pass_action);
 
     /* Step 1: render atmosphere background */
-    if (state->atmosphere) {
-        sg_apply_pipeline(pass->pip_2);
-        sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &(sg_range){&fs_sun_atmos_u, sizeof(scene_fs_sun_atmos_uniforms_t)});
-        scene_draw_atmos(state);
-    }
+    sg_apply_pipeline(pass->pip_2);
+    sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &(sg_range){&fs_sun_atmos_u, sizeof(scene_fs_sun_atmos_uniforms_t)});
+    scene_draw_atmos(state);
 
     /* Step 2: render scene */
     sg_apply_pipeline(pass->pip);

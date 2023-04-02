@@ -537,7 +537,10 @@ void sokol_update_group(
             // Apply geometry-specific scaling to transform matrix
             geometry->populate(&page->transforms[pstart], geometry_data, 
                 to_copy, geometry_self);
-            geometry_data = ECS_OFFSET(geometry_data, geometry_size * to_copy);
+
+            if (geometry_self) {
+                geometry_data = ECS_OFFSET(geometry_data, geometry_size * to_copy);
+            }
 
             remaining -= to_copy;
             page->count += to_copy;

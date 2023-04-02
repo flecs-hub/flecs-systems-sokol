@@ -36,6 +36,8 @@ sg_image sokol_target(
 
 sg_image sokol_noise_texture(int32_t width, int32_t height);
 
+sg_image sokol_bg_texture(ecs_rgb_t color, int32_t width, int32_t height);
+
 sg_buffer sokol_buffer_quad(void);
 
 sg_buffer sokol_buffer_box(void);

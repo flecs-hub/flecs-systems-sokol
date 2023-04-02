@@ -285,9 +285,10 @@ void sokol_init_global_uniforms(
     glm_vec3_copy(d, state->uniforms.eye_dir);
 
     /* Shadow parameters */
+    float shadow_far = u->far_ > 128 ? 128 : u->far_;
     u->shadow_map_size = SOKOL_SHADOW_MAP_SIZE;
-    u->shadow_near = -8;
-    u->shadow_far = 128 + (u->eye_pos[1] - 32) * 2;
+    u->shadow_near = -(8 + u->eye_pos[1]);
+    u->shadow_far = shadow_far;
 
     /* Calculate light position in screen space */
     vec3 sun_pos;
@@ -384,6 +385,8 @@ void SokolRender(ecs_iter_t *it) {
     if (state.atmosphere) {
         sokol_run_atmos_pass(&r->atmos_pass, &state);
         state.atmos = r->atmos_pass.color_target;
+    } else {
+        state.atmos = r->resources.bg_texture;
     }
 
     /* Render scene */
@@ -439,6 +442,8 @@ void SokolInitRenderer(ecs_iter_t *it) {
     ecs_trace("sokol: library initialized");
 
     sokol_resources_t resources = sokol_init_resources();
+    resources.bg_texture = sokol_bg_texture(canvas->background_color, 2, 2);
+
     sokol_offscreen_pass_t depth_pass;
     sokol_offscreen_pass_t scene_pass = sokol_init_scene_pass(
         canvas->background_color, w, h, 1, &depth_pass);

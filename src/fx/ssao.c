@@ -30,13 +30,19 @@ SokolFx sokol_init_ssao(
     fx.width = width;
     fx.height = height;
 
+#ifdef __EMSCRIPTEN__
+    float factor = 2;
+#else
+    float factor = 0.5;
+#endif
+
     // Ambient occlusion shader 
     int32_t ao = sokol_fx_add_pass(&fx, &(sokol_fx_pass_desc_t){
         .name = "ssao",
-        .outputs = {{ .global_size = true, .factor = 0.5 }},
+        .outputs = {{ .global_size = true, .factor = factor }},
         .shader_header = shd_ssao_header,
         .shader = shd_ssao,
-        .color_format = SG_PIXELFORMAT_RGBA8,
+        .color_format = SG_PIXELFORMAT_RGBA16F,
         .inputs = { "t_depth" },
         .steps = {
             [0] = {
@@ -75,7 +81,7 @@ SokolFx sokol_init_ssao(
         .outputs = {{ .global_size = true }},
         .shader_header = shd_blend_mult_header,
         .shader = shd_blend_mult,
-        .color_format = SG_PIXELFORMAT_RGBA16F,
+        .color_format = SG_PIXELFORMAT_RGBA8,
         .inputs = { "t_scene", "t_occlusion" },
         .steps = {
             [0] = {

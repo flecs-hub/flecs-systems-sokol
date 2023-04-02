@@ -328,5 +328,38 @@ sg_image sokol_noise_texture(
         }
     });
 
+    ecs_os_free(data);
+
+    return img;
+}
+
+sg_image sokol_bg_texture(ecs_rgb_t color, int32_t width, int32_t height)
+{
+    uint32_t data[width][height];
+
+    for (int32_t x = 0; x < width; x ++) {
+        for (int32_t y = 0; y < height; y ++) {
+            uint32_t c = (uint32_t)(color.r * 256);
+            c += (uint32_t)(color.g * 256) << 8;
+            c += (uint32_t)(color.b * 256) << 16;
+            c += 255u << 24;
+            data[x][y] = c;
+            
+        }
+    }
+
+    sg_image img = sg_make_image(&(sg_image_desc){
+        .width = width,
+        .height = height,
+        .wrap_u = SG_WRAP_CLAMP_TO_EDGE,
+        .wrap_v = SG_WRAP_CLAMP_TO_EDGE,
+        .pixel_format = SG_PIXELFORMAT_RGBA8,
+        .label = "Background texture",
+        .data.subimage[0][0] = {
+            .ptr = data,
+            .size = width * height * 4
+        }
+    });
+
     return img;
 }
