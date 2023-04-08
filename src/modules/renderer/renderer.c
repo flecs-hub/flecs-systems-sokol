@@ -264,6 +264,7 @@ void sokol_init_global_uniforms(
 
     glm_mat4_mul(u->mat_p, u->mat_v, u->mat_vp);
     glm_mat4_inv(u->mat_v, u->inv_mat_v);
+    glm_mat4_inv(u->mat_vp, u->inv_mat_vp);
 
     /* Light parameters */
     if (state->light) {
@@ -400,7 +401,7 @@ void SokolRender(ecs_iter_t *it) {
 
     /* Fog */
     const EcsRgb *bg_color = &canvas->background_color;
-    sokol_fog_set_params(&fx->fog, canvas->fog_density, 
+    sokol_fog_set_params(&fx->fog, canvas->fog_density, canvas->fog_falloff,
         bg_color->r, bg_color->g, bg_color->b, state.uniforms.eye_horizon[1]);
     sg_image scene_with_fog = sokol_fx_run(&fx->fog, 3, (sg_image[]){ 
         ssao, r->depth_pass.color_target, state.atmos },

@@ -41,6 +41,7 @@ typedef struct sokol_global_uniforms_t {
     mat4 mat_vp;
     mat4 inv_mat_p;
     mat4 inv_mat_v;
+    mat4 inv_mat_vp;
     
     mat4 light_mat_v;
     mat4 light_mat_vp;

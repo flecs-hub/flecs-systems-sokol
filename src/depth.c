@@ -26,9 +26,12 @@ const char* sokol_vs_depth(void)
         "}\n";
 }
 
-const char* sokol_fs_depth(void) 
-{
-    return SOKOL_SHADER_HEADER
+sg_pipeline init_depth_pipeline(int32_t sample_count) {
+    ecs_trace("sokol: initialize depth pipeline");
+
+    char *fs = sokol_shader_from_str(
+        SOKOL_SHADER_HEADER
+        "#include \"etc/sokol/shaders/common.glsl\"\n"
         "uniform vec3 u_eye_pos;\n"
         "uniform float u_near;\n"
         "uniform float u_far;\n"
@@ -37,32 +40,9 @@ const char* sokol_fs_depth(void)
         "in vec3 position;\n"
         "out vec4 frag_color;\n"
 
-        SOKOL_SHADER_FUNC_FLOAT_TO_RGBA
-
-#ifdef SOKOL_LOG_DEPTH
-        "vec4 depth_to_rgba(vec3 pos) {\n"
-        "  vec3 pos_norm = pos / u_far;\n"
-        "  float d = length(pos_norm) * u_far;\n"
-        "  d = clamp(d, 0.0, u_far * 0.98);\n"
-        "  d = log(u_depth_c * d + 1.0) / log(u_depth_c * u_far + 1.0);\n"
-        "  return float_to_rgba(d);\n"
-        "}\n"
-#else
-        "vec4 depth_to_rgba(vec3 pos) {\n"
-        "  vec3 pos_norm = pos / u_far;\n"
-        "  float d = length(pos_norm);\n"
-        "  d = clamp(d, 0.0, 1.0);\n"
-        "  return float_to_rgba(d);\n"
-        "}\n"
-#endif
-
         "void main() {\n"
         "  frag_color = depth_to_rgba(position);\n"
-        "}\n";
-}
-
-sg_pipeline init_depth_pipeline(int32_t sample_count) {
-    ecs_trace("sokol: initialize depth pipeline");
+        "}\n");
 
     /* create an instancing shader */
     sg_shader shd = sg_make_shader(&(sg_shader_desc){
@@ -87,7 +67,7 @@ sg_pipeline init_depth_pipeline(int32_t sample_count) {
             }            
         },
         .vs.source = sokol_vs_depth(),
-        .fs.source = sokol_fs_depth()
+        .fs.source = fs
     });
 
     return sg_make_pipeline(&(sg_pipeline_desc){

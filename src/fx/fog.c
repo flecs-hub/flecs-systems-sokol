@@ -31,11 +31,11 @@ SokolFx sokol_init_fog(
         .color_format = SG_PIXELFORMAT_RGBA16F,
         .mipmap_count = 2,
         .inputs = { "hdr", "depth", "atmos" },
-        .params = { "u_density", "u_r", "u_g", "u_b", "u_horizon" },
+        .params = { "u_density", "u_falloff", "u_r", "u_g", "u_b", "u_horizon" },
         .steps = {
             [0] = {
                 .inputs = { {FOG_INPUT_HDR}, {FOG_INPUT_DEPTH}, {FOG_INPUT_ATMOS} },
-                .params = { 1.2, 0.0, 0.0, 0.0 }
+                .params = { 0.06, 0.2, 0.0, 0.0, 0.0, 0.0 }
             }
         }
     });
@@ -48,6 +48,7 @@ SokolFx sokol_init_fog(
 void sokol_fog_set_params(
     SokolFx *fx,
     float density,
+    float falloff,
     float r,
     float g,
     float b,
@@ -55,8 +56,9 @@ void sokol_fog_set_params(
 {
     float *params = fx->pass[0].steps[0].params;
     params[0] = density;
-    params[1] = r;
-    params[2] = g;
-    params[3] = b;
-    params[4] = uv_horizon;
+    params[1] = falloff;
+    params[2] = r;
+    params[3] = g;
+    params[4] = b;
+    params[5] = uv_horizon;
 }

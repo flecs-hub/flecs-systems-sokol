@@ -75,10 +75,11 @@ SokolFx sokol_init_blend(
 
 void sokol_fog_set_params(
     SokolFx *fx,
+    float density,
+    float falloff,
     float r,
     float g,
     float b,
-    float density,
     float uv_horizon);
 
 sokol_fx_resources_t* sokol_init_fx(

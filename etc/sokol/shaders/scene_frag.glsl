@@ -8,13 +8,13 @@ uniform float u_shadow_map_size;
 uniform sampler2D shadow_map;
 uniform float u_shadow_far;
 
-
 in vec4 position;
 in vec4 light_position;
 in vec3 normal;
 in vec4 color;
 in vec3 material;
 out vec4 frag_color;
+out vec4 normal_color;
 
 const int pcf_count = 4;
 const int pcf_samples = (2 * pcf_count + 1) * (2 * pcf_count + 1);
@@ -68,8 +68,8 @@ void main() {
     float texel_size = 1.0 / u_shadow_map_size;
     float d = length(vd);
     float s = sampleShadowPCF(shadow_map, sm_uv, texel_size, depth, n_dot_l, d);
-
     s = max(s, emissive);
+    s = 1.0;
     float r_dot_v = max(dot(r, v), 0.0);
     float l_shiny = pow(r_dot_v * n_dot_l, shininess);
     vec3 l_specular = vec3(specular_power * l_shiny * u_light_color);

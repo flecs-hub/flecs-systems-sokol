@@ -33,7 +33,7 @@ SokolFx sokol_init_ssao(
 #ifdef __EMSCRIPTEN__
     float factor = 2;
 #else
-    float factor = 0.5;
+    float factor = 1.0;
 #endif
 
     // Ambient occlusion shader 
@@ -54,10 +54,10 @@ SokolFx sokol_init_ssao(
     // Blur to reduce the noise, so we can keep sample count low
     int blur = sokol_fx_add_pass(&fx, &(sokol_fx_pass_desc_t){
         .name = "blur",
-        .outputs = {{512}},
+        .outputs = {{2048}},
         .shader_header = shd_blur_hdr,
         .shader = shd_blur,
-        .color_format = SG_PIXELFORMAT_RGBA8,
+        .color_format = SG_PIXELFORMAT_RGBA16F,
         .inputs = { "tex" },
         .params = { "horizontal" },
         .steps = {
@@ -81,7 +81,7 @@ SokolFx sokol_init_ssao(
         .outputs = {{ .global_size = true }},
         .shader_header = shd_blend_mult_header,
         .shader = shd_blend_mult,
-        .color_format = SG_PIXELFORMAT_RGBA8,
+        .color_format = SG_PIXELFORMAT_RGBA16F,
         .inputs = { "t_scene", "t_occlusion" },
         .steps = {
             [0] = {
