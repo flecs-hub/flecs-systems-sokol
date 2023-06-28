@@ -57,7 +57,7 @@ SokolFx sokol_init_ssao(
         .outputs = {{512}},
         .shader_header = shd_blur_hdr,
         .shader = shd_blur,
-        .color_format = SG_PIXELFORMAT_RGBA8,
+        .color_format = SG_PIXELFORMAT_RGBA16F,
         .inputs = { "tex" },
         .params = { "horizontal" },
         .steps = {
@@ -81,7 +81,7 @@ SokolFx sokol_init_ssao(
         .outputs = {{ .global_size = true }},
         .shader_header = shd_blend_mult_header,
         .shader = shd_blend_mult,
-        .color_format = SG_PIXELFORMAT_RGBA8,
+        .color_format = SG_PIXELFORMAT_RGBA16F,
         .inputs = { "t_scene", "t_occlusion" },
         .steps = {
             [0] = {
