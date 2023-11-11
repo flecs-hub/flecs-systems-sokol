@@ -271,6 +271,11 @@ int sokol_run_action(
         const EcsCanvas *canvas_data = ecs_get(world, canvas, EcsCanvas);
         width = canvas_data->width;
         height = canvas_data->height;
+        if (canvas_data->title) {
+          //It's safe. Sokol copies string.
+          //https://github.com/floooh/sokol/blob/5b6b743ab055361052ad8c67387d51e6d809de02/sokol_app.h#L3059
+          title = canvas_data->title;
+        }
     }
 
     bool high_dpi = true;
