@@ -9,9 +9,10 @@
 #define SOKOL_MAX_FX_OUTPUTS (8)
 #define SOKOL_MAX_FX_PASS (8)
 #define SOKOL_MAX_FX_PARAMS (32)
-#define SOKOL_SHADOW_MAP_SIZE (4096)
+#define SOKOL_SHADOW_MAP_SIZE (2048)
 #define SOKOL_DEFAULT_DEPTH_NEAR (2.0)
 #define SOKOL_DEFAULT_DEPTH_FAR (2500.0)
+#define SOKOL_MAX_LIGHTS (32)
 
 typedef struct SokolQuery {
     ecs_query_t *query;
@@ -46,6 +47,12 @@ typedef struct sokol_global_uniforms_t {
     mat4 light_mat_vp;
 
     vec3 light_ambient;
+    
+    vec4 light_ambient_ground;
+    float light_ambient_ground_falloff;
+    float light_ambient_ground_offset;
+    float light_ambient_ground_intensity;
+
     vec3 sun_direction;
     vec3 sun_color;
     vec3 sun_screen_pos;
@@ -70,6 +77,12 @@ typedef struct sokol_global_uniforms_t {
     float shadow_map_size;
 } sokol_global_uniforms_t;
 
+typedef struct sokol_light_t {
+    vec3 color;
+    vec3 position;
+    float distance;
+} sokol_light_t;
+
 /* Data that is collected once per frame and that is shared between passes */
 typedef struct sokol_render_state_t {
     ecs_world_t *world;
@@ -80,6 +93,10 @@ typedef struct sokol_render_state_t {
     const EcsAtmosphere *atmosphere;
 
     ecs_rgb_t ambient_light;
+    ecs_rgb_t ambient_light_ground;
+    float ambient_light_ground_falloff;
+    float ambient_light_ground_offset;
+    float ambient_light_ground_intensity;
     int32_t width;
     int32_t height;
 
@@ -87,6 +104,8 @@ typedef struct sokol_render_state_t {
     sokol_global_uniforms_t uniforms;
     sg_image atmos;
     sg_image shadow_map;
+
+    ecs_vec_t lights;
 } sokol_render_state_t;
 
 typedef struct sokol_offscreen_pass_t {

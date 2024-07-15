@@ -104,9 +104,9 @@ void key_down(
     ecs_key_state_t *key)
 {
     if (key->state) {
-        key->pressed = false;
+        key->down = false;
     } else {
-        key->pressed = true;
+        key->down = true;
     }
 
     key->state = true;
@@ -126,9 +126,9 @@ void key_reset(
 {
     if (!state->current) {
         state->state = 0;
-        state->pressed = 0;
+        state->down = 0;
     } else if (state->state) {
-        state->pressed = 0;
+        state->down = 0;
     }
 }
 
@@ -147,9 +147,9 @@ void mouse_down(
     ecs_key_state_t *mouse)
 {
     if (mouse->state) {
-        mouse->pressed = false;
+        mouse->down = false;
     } else {
-        mouse->pressed = true;
+        mouse->down = true;
     }
 
     mouse->state = true;
@@ -169,9 +169,9 @@ void mouse_button_reset(
 {
     if (!mouse->current) {
         mouse->state = 0;
-        mouse->pressed = 0;
+        mouse->down = 0;
     } else if (mouse->state) {
-        mouse->pressed = 0;
+        mouse->down = 0;
     }
 }
 
@@ -187,11 +187,9 @@ static
 ecs_entity_t sokol_get_canvas(const ecs_world_t *world) {
     ecs_entity_t result = 0;
 
-    ecs_iter_t it = ecs_term_iter(world, &(ecs_term_t) {
-        .id = ecs_id(EcsCanvas)
-    });
+    ecs_iter_t it = ecs_each(world, EcsCanvas);
 
-    if (ecs_term_next(&it)) {
+    if (ecs_each_next(&it)) {
         result = it.entities[0];
         ecs_iter_fini(&it);
     }
@@ -202,8 +200,8 @@ ecs_entity_t sokol_get_canvas(const ecs_world_t *world) {
 static
 void sokol_input_action(const sapp_event* evt, sokol_app_ctx_t *ctx) {
     ecs_world_t *world = ctx->world;
-    EcsInput *input = ecs_singleton_get_mut(world, EcsInput);
-
+    EcsInput *input = ecs_singleton_ensure(world, EcsInput);
+ 
     switch (evt->type) {
     case SAPP_EVENTTYPE_MOUSE_DOWN:
         if (evt->mouse_button == SAPP_MOUSEBUTTON_LEFT)
@@ -244,7 +242,7 @@ void sokol_frame_action(sokol_app_ctx_t *ctx) {
     ecs_app_run_frame(ctx->world, ctx->desc);
 
     /* Reset input buffer */
-    EcsInput *input = ecs_singleton_get_mut(ctx->world, EcsInput);
+    EcsInput *input = ecs_singleton_ensure(ctx->world, EcsInput);
     keys_reset(input);
     mouse_reset(input);
 }
@@ -291,7 +289,6 @@ int sokol_run_action(
         .window_title = title,
         .width = width,
         .height = height,
-        .sample_count = 1,
         .high_dpi = high_dpi,
         .gl_force_gles2 = false
     });

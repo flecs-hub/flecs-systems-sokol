@@ -13,7 +13,8 @@
             "flecs.components.geometry",
             "flecs.systems.transform",
             "flecs.game"
-        ]
+        ],
+        "amalgamate": true
     },
     "lang.c": {
         "${os linux}": {

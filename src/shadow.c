@@ -141,12 +141,12 @@ void sokol_run_shadow_pass(
     /* Loop buffers, render scene */
     ecs_iter_t qit = ecs_query_iter(state->world, state->q_scene);
     while (ecs_query_next(&qit)) {
-        SokolGeometry *geometry = ecs_field(&qit, SokolGeometry, 1);
+        SokolGeometry *geometry = ecs_field(&qit, SokolGeometry, 0);
         
         int b;
         for (b = 0; b < qit.count; b ++) {
             /* Only draw solids, ignore emissive and transparent (for now) */
-            shadow_draw_instances(&geometry[b], geometry[b].solid);
+            shadow_draw_instances(&geometry[b], &geometry[b].solid);
         }
     }
 

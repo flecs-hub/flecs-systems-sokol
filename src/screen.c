@@ -1,7 +1,7 @@
 #include "private_api.h"
 
 static
-sg_pipeline init_screen_pipeline() {
+sg_pipeline init_screen_pipeline(void) {
     ecs_trace("sokol: initialize screen pipeline");
 
     /* create an instancing shader */

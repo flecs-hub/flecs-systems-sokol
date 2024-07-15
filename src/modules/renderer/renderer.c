@@ -276,7 +276,12 @@ void sokol_init_global_uniforms(
         glm_vec3_zero(u->sun_color);
         u->sun_intensity = 1.0;
     }
+    
     glm_vec3_copy((float*)&state->ambient_light, u->light_ambient);
+    glm_vec3_copy((float*)&state->ambient_light_ground, u->light_ambient_ground);
+    u->light_ambient_ground_falloff = state->ambient_light_ground_falloff;
+    u->light_ambient_ground_offset = state->ambient_light_ground_offset;
+    u->light_ambient_ground_intensity = state->ambient_light_ground_intensity;
 
     // Direction vector
     vec3 d; glm_vec3_sub(u->eye_lookat, u->eye_pos, d);
@@ -285,10 +290,8 @@ void sokol_init_global_uniforms(
     glm_vec3_copy(d, state->uniforms.eye_dir);
 
     /* Shadow parameters */
-    float shadow_far = u->far_ > 128 ? 128 : u->far_;
     u->shadow_map_size = SOKOL_SHADOW_MAP_SIZE;
     u->shadow_near = -(8 + u->eye_pos[1]);
-    u->shadow_far = shadow_far;
 
     /* Calculate light position in screen space */
     vec3 sun_pos;
@@ -304,12 +307,80 @@ void sokol_init_global_uniforms(
     sokol_world_to_screen(lookat, u->eye_horizon, state);
 }
 
+static
+int sokol_qsort_light_compare(const void *ptr1, const void *ptr2) {
+    const sokol_light_t *l1 = ptr1;
+    const sokol_light_t *l2 = ptr2;
+
+    float d1 = pow(l1->position[0], 2.0) + 
+               pow(l1->position[2], 2.0);
+    float d2 = pow(l2->position[0], 2.0) + 
+               pow(l2->position[2], 2.0);
+
+    return (d1 > d2) - (d1 < d2);
+}
+
+/* Collect lights */
+static
+void sokol_gather_lights(ecs_world_t *world, SokolRenderer *r, sokol_render_state_t *state) {
+    ecs_vec_clear(&r->lights);
+
+    vec3 eye_pos;
+    glm_vec3_copy(state->uniforms.eye_pos, eye_pos);
+
+    eye_pos[0] *= -1;
+
+    ecs_iter_t it = ecs_query_iter(world, r->lights_query);
+    while (ecs_query_next(&it)) {
+        EcsPointLight *l = ecs_field(&it, EcsPointLight, 0);
+        EcsPosition3 *p = ecs_field(&it, EcsPosition3, 1);
+        EcsTransform3 *m = ecs_field(&it, EcsTransform3, 2);
+
+        for (int i = 0; i < it.count; i ++) {
+            sokol_light_t *light = ecs_vec_append_t(
+                NULL, &r->lights, sokol_light_t);
+            glm_vec3_copy(l[i].color, light->color);
+
+            light->color[0] *= l[i].intensity;
+            light->color[1] *= l[i].intensity;
+            light->color[2] *= l[i].intensity;
+
+            vec3 pos = {
+                m[i].value[3][0],
+                m[i].value[3][1],
+                m[i].value[3][2]
+            };
+
+            light->position[0] = pos[0];
+            light->position[1] = pos[1];
+            light->position[2] = pos[2];
+
+            light->distance = l[i].distance;
+
+            glm_vec3_sub(light->position, eye_pos, light->position);
+        }
+    }
+
+    sokol_light_t *lights = ecs_vec_first(&r->lights);
+    qsort(lights, ecs_vec_count(&r->lights), sizeof(sokol_light_t),
+        sokol_qsort_light_compare);
+
+    int32_t lights_count = ecs_vec_count(&r->lights);
+    if (lights_count > SOKOL_MAX_LIGHTS) {
+        lights_count = SOKOL_MAX_LIGHTS;
+    }
+
+    ecs_vec_set_count_t(NULL, &r->lights, sokol_light_t, lights_count);
+
+    state->lights = r->lights;
+}
+
 /* Render */
 static
 void SokolRender(ecs_iter_t *it) {
     ecs_world_t *world = it->world;
-    SokolRenderer *r = ecs_field(it, SokolRenderer, 1);
-    SokolQuery *q_buffers = ecs_field(it, SokolQuery, 2);
+    SokolRenderer *r = ecs_field(it, SokolRenderer, 0);
+    SokolQuery *q_buffers = ecs_field(it, SokolQuery, 1);
     sokol_render_state_t state = {0};
     sokol_fx_resources_t *fx = r->fx;
 
@@ -331,10 +402,11 @@ void SokolRender(ecs_iter_t *it) {
     state.resources = &r->resources;
 
     const EcsCanvas *canvas = ecs_get(world, r->canvas, EcsCanvas);
+    state.uniforms.shadow_far = canvas->shadow_far;
 
     /* Resize resources if canvas changed */
     if (state.width != canvas->width || state.height != canvas->height) {
-        EcsCanvas *canvas_w = ecs_get_mut(world, r->canvas, EcsCanvas);
+        EcsCanvas *canvas_w = ecs_ensure(world, r->canvas, EcsCanvas);
         canvas_w->width = state.width;
         canvas_w->height = state.height;
         ecs_modified(world, r->canvas, EcsCanvas);
@@ -356,6 +428,10 @@ void SokolRender(ecs_iter_t *it) {
 
     /* Get ambient light */
     state.ambient_light = canvas->ambient_light;
+    state.ambient_light_ground = canvas->ambient_light_ground;
+    state.ambient_light_ground_falloff = canvas->ambient_light_ground_falloff;
+    state.ambient_light_ground_offset = canvas->ambient_light_ground_offset;
+    state.ambient_light_ground_intensity = canvas->ambient_light_ground_intensity;
 
     if (canvas->directional_light) {
         state.light = ecs_get(world, canvas->directional_light, 
@@ -371,6 +447,9 @@ void SokolRender(ecs_iter_t *it) {
 
     /* Compute uniforms that are shared between passes */
     sokol_init_global_uniforms(&state);
+
+    /* Collect lights for scene */
+    sokol_gather_lights(world, r, &state);
 
     /* Compute shadow parameters and run shadow pass */
     if (canvas->directional_light) {
@@ -420,7 +499,7 @@ void SokolCommit(ecs_iter_t *it) {
 static
 void SokolInitRenderer(ecs_iter_t *it) {
     ecs_world_t *world = it->world;
-    EcsCanvas *canvas = ecs_field(it, EcsCanvas, 1);
+    EcsCanvas *canvas = ecs_field(it, EcsCanvas, 0);
 
     if (it->count > 1) {
         ecs_err("sokol: multiple canvas instances unsupported");
@@ -449,6 +528,17 @@ void SokolInitRenderer(ecs_iter_t *it) {
         canvas->background_color, w, h, 1, &depth_pass);
     sokol_offscreen_pass_t atmos_pass = sokol_init_atmos_pass();
 
+    ecs_vec_t lights; 
+    ecs_vec_init_t(NULL, &lights, sokol_light_t, 0);
+
+    ecs_query_t *lights_query = ecs_query(world, {
+        .terms = {
+            { ecs_id(EcsPointLight) },
+            { ecs_id(EcsPosition3) },
+            { ecs_id(EcsTransform3) }
+        },
+    });
+
     ecs_set(world, SokolRendererInst, SokolRenderer, {
         .canvas = it->entities[0],
         .resources = resources,
@@ -457,7 +547,9 @@ void SokolInitRenderer(ecs_iter_t *it) {
         .scene_pass = scene_pass,
         .atmos_pass = atmos_pass,
         .screen_pass = sokol_init_screen_pass(),
-        .fx = sokol_init_fx(w, h)
+        .fx = sokol_init_fx(w, h),
+        .lights = lights,
+        .lights_query = lights_query
     });
 
     ecs_trace("sokol: canvas initialized");
@@ -465,7 +557,7 @@ void SokolInitRenderer(ecs_iter_t *it) {
     ecs_set(world, SokolRendererInst, SokolMaterials, { true });
 
     ecs_set_pair(world, SokolRendererInst, SokolQuery, ecs_id(SokolGeometry), {
-        ecs_query_new(world, "[in] flecs.systems.sokol.Geometry")
+        ecs_query(world, { .expr = "[in] flecs.systems.sokol.Geometry" })
     });
 
     sokol_init_geometry(world, &resources);
@@ -489,7 +581,7 @@ void FlecsSystemsSokolRendererImport(
     ECS_IMPORT(world, FlecsSystemsSokolGeometry);
 
     /* Create components in parent scope */
-    ecs_entity_t parent = ecs_lookup_fullpath(world, "flecs.systems.sokol");
+    ecs_entity_t parent = ecs_lookup(world, "flecs.systems.sokol");
     ecs_entity_t module = ecs_set_scope(world, parent);
     ecs_set_name_prefix(world, "Sokol");
 
@@ -503,15 +595,15 @@ void FlecsSystemsSokolRendererImport(
         flecs.components.gui.Canvas, 
         [out] !flecs.systems.sokol.Renderer($));
 
-    /* Configure no_readonly for SokolInitRenderer as it needs direct access to
+    /* Configure immediate for SokolInitRenderer as it needs direct access to
      * the world for creating queries */
     ecs_system(world, {
         .entity = SokolInitRenderer,
-        .no_readonly = true
+        .immediate = true
     });
 
     /* System that cleans up renderer */
-    ECS_OBSERVER(world, SokolFiniRenderer, EcsUnSet, 
+    ECS_OBSERVER(world, SokolFiniRenderer, EcsOnRemove, 
         flecs.systems.sokol.Renderer);
 
     /* System that orchestrates the render tasks */

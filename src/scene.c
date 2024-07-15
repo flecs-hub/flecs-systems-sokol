@@ -10,12 +10,23 @@ typedef struct scene_vs_uniforms_t {
 
 typedef struct scene_fs_uniforms_t {
     vec3 light_ambient;
+    vec3 light_ambient_ground;
     vec3 light_direction;
     vec3 light_color;
     vec3 eye_pos;
+    float light_ambient_ground_falloff;
+    float light_ambient_ground_offset;
+    float light_ambient_ground_intensity;
     float shadow_map_size;
     float shadow_far;
+    int light_count;
 } scene_fs_uniforms_t;
+
+typedef struct scene_fs_lights_t {
+    vec3 light_colors[SOKOL_MAX_LIGHTS];
+    vec3 light_positions[SOKOL_MAX_LIGHTS];
+    float light_distance[SOKOL_MAX_LIGHTS];
+} scene_fs_lights_t;
 
 typedef struct scene_fs_sun_atmos_uniforms_t {
     vec3 sun_screen_pos;
@@ -79,11 +90,24 @@ sg_pipeline init_scene_pipeline(int32_t sample_count) {
                     .size = sizeof(scene_fs_uniforms_t),
                     .uniforms = {
                         [0] = { .name="u_light_ambient", .type=SG_UNIFORMTYPE_FLOAT3 },
-                        [1] = { .name="u_light_direction", .type=SG_UNIFORMTYPE_FLOAT3 },
-                        [2] = { .name="u_light_color", .type=SG_UNIFORMTYPE_FLOAT3 },
-                        [3] = { .name="u_eye_pos", .type=SG_UNIFORMTYPE_FLOAT3 },
-                        [4] = { .name="u_shadow_map_size", .type=SG_UNIFORMTYPE_FLOAT },
-                        [5] = { .name="u_shadow_far", .type=SG_UNIFORMTYPE_FLOAT }
+                        [1] = { .name="u_light_ambient_ground", .type=SG_UNIFORMTYPE_FLOAT3 },
+                        [2] = { .name="u_light_direction", .type=SG_UNIFORMTYPE_FLOAT3 },
+                        [3] = { .name="u_light_color", .type=SG_UNIFORMTYPE_FLOAT3 },
+                        [4] = { .name="u_eye_pos", .type=SG_UNIFORMTYPE_FLOAT3 },
+                        [5] = { .name="u_light_ambient_ground_falloff", .type=SG_UNIFORMTYPE_FLOAT },
+                        [6] = { .name="u_light_ambient_ground_offset", .type=SG_UNIFORMTYPE_FLOAT },
+                        [7] = { .name="u_light_ambient_ground_intensity", .type=SG_UNIFORMTYPE_FLOAT },
+                        [8] = { .name="u_shadow_map_size", .type=SG_UNIFORMTYPE_FLOAT },
+                        [9] = { .name="u_shadow_far", .type=SG_UNIFORMTYPE_FLOAT },
+                        [10] = { .name="u_light_count", .type=SG_UNIFORMTYPE_INT }
+                    }
+                },
+                [1] = {
+                    .size = sizeof(scene_fs_lights_t),
+                    .uniforms = {
+                        [0] = { .name="u_point_light_color",    .type=SG_UNIFORMTYPE_FLOAT3, .array_count = SOKOL_MAX_LIGHTS },
+                        [1] = { .name="u_point_light_position", .type=SG_UNIFORMTYPE_FLOAT3, .array_count = SOKOL_MAX_LIGHTS  },
+                        [2] = { .name="u_point_light_distance", .type=SG_UNIFORMTYPE_FLOAT, .array_count = SOKOL_MAX_LIGHTS  },
                     }
                 }
             }
@@ -101,18 +125,18 @@ sg_pipeline init_scene_pipeline(int32_t sample_count) {
         .index_type = SG_INDEXTYPE_UINT16,
         .layout = {
             .buffers = {
-                [COLOR_I] =     { .stride = 12, .step_func=SG_VERTEXSTEP_PER_INSTANCE },
+                [COLOR_I] =     { .stride = 0,  .step_func=SG_VERTEXSTEP_PER_INSTANCE },
                 [MATERIAL_I] =  { .stride = 12, .step_func=SG_VERTEXSTEP_PER_INSTANCE },
-                [TRANSFORM_I] = { .stride = 64, .step_func=SG_VERTEXSTEP_PER_INSTANCE }
+                [TRANSFORM_I] = { .stride = 64, .step_func=SG_VERTEXSTEP_PER_INSTANCE } 
             },
 
             .attrs = {
                 /* Static geometry */
                 [POSITION_I] =      { .buffer_index=POSITION_I, .offset=0,  .format=SG_VERTEXFORMAT_FLOAT3 },
-                [NORMAL_I] =        { .buffer_index=NORMAL_I, .offset=0,  .format=SG_VERTEXFORMAT_FLOAT3 },
+                [NORMAL_I] =        { .buffer_index=NORMAL_I,   .offset=0,  .format=SG_VERTEXFORMAT_FLOAT3 },
 
                 /* Color buffer (per instance) */
-                [COLOR_I] =         { .buffer_index=COLOR_I, .offset=0, .format=SG_VERTEXFORMAT_FLOAT3 },
+                [COLOR_I] =         { .buffer_index=COLOR_I,    .offset=0, .format=SG_VERTEXFORMAT_FLOAT3 },
 
                 /* Material buffer (per instance) */
                 [MATERIAL_I] =      { .buffer_index=MATERIAL_I, .offset=0, .format=SG_VERTEXFORMAT_FLOAT3 },
@@ -237,11 +261,13 @@ sokol_offscreen_pass_t sokol_init_scene_pass(
         pass.depth_target, sample_count);
 
     pass.pass_action = sokol_clear_action(background_color, false, false);
+
+    ecs_trace("sokol: initialize scene pipeline");
     pass.pip = init_scene_pipeline(sample_count);
     pass.pip_2 = init_scene_atmos_sun_pipeline(sample_count);
     pass.sample_count = sample_count;
 
-    ecs_trace("sokol: initialize scene pipeline");
+    ecs_trace("sokol: initialized scene pass");
     return pass;
 }
 
@@ -315,6 +341,11 @@ void sokol_run_scene_pass(
 
     scene_fs_uniforms_t fs_u;
     glm_vec3_copy(state->uniforms.light_ambient, fs_u.light_ambient);
+    glm_vec3_copy(state->uniforms.light_ambient_ground, fs_u.light_ambient_ground);
+    fs_u.light_ambient_ground_falloff = state->uniforms.light_ambient_ground_falloff;
+    fs_u.light_ambient_ground_offset = state->uniforms.light_ambient_ground_offset;
+    fs_u.light_ambient_ground_intensity = state->uniforms.light_ambient_ground_intensity;
+
     glm_vec3_copy(state->uniforms.sun_direction, fs_u.light_direction);
     glm_vec3_copy(state->uniforms.sun_color, fs_u.light_color);
     glm_vec3_scale(fs_u.light_color, state->uniforms.sun_intensity, fs_u.light_color);
@@ -331,6 +362,15 @@ void sokol_run_scene_pass(
     fs_sun_atmos_u.aspect = state->uniforms.aspect;
     fs_sun_atmos_u.sun_intensity = 1.0 + state->uniforms.sun_intensity * 6;
 
+    scene_fs_lights_t lights_u;
+    sokol_light_t *lights = ecs_vec_first(&state->lights);
+    for (int i = 0; i < ecs_vec_count(&state->lights); i ++) {
+        glm_vec3_copy(lights[i].color, lights_u.light_colors[i]);
+        glm_vec3_copy(lights[i].position, lights_u.light_positions[i]);
+        lights_u.light_distance[i] = lights[i].distance;
+    }
+    fs_u.light_count = ecs_vec_count(&state->lights);
+
     /* Render to offscreen texture so screen-space effects can be applied */
     sg_begin_pass(pass->pass, &pass->pass_action);
 
@@ -343,16 +383,17 @@ void sokol_run_scene_pass(
     sg_apply_pipeline(pass->pip);
     sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &(sg_range){&vs_u, sizeof(scene_vs_uniforms_t)});
     sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &(sg_range){&fs_u, sizeof(scene_fs_uniforms_t)});
+    sg_apply_uniforms(SG_SHADERSTAGE_FS, 1, &(sg_range){&lights_u, sizeof(scene_fs_lights_t)});
 
     /* Loop geometry, render scene */
     ecs_iter_t qit = ecs_query_iter(state->world, state->q_scene);
     while (ecs_query_next(&qit)) {
-        SokolGeometry *geometry = ecs_field(&qit, SokolGeometry, 1);
+        SokolGeometry *geometry = ecs_field(&qit, SokolGeometry, 0);
 
         int b;
         for (b = 0; b < qit.count; b ++) {
-            scene_draw_instances(&geometry[b], geometry[b].solid, state->shadow_map);
-            scene_draw_instances(&geometry[b], geometry[b].emissive, state->shadow_map);
+            scene_draw_instances(&geometry[b], &geometry[b].solid, state->shadow_map);
+            scene_draw_instances(&geometry[b], &geometry[b].emissive, state->shadow_map);
         }
     }
     sg_end_pass();

@@ -134,7 +134,7 @@ sokol_offscreen_pass_t sokol_init_depth_pass(
         "Depth color target", w, h, sample_count);
     ecs_rgb_t background_color = {1, 1, 1};
 
-    return (sokol_offscreen_pass_t){
+    sokol_offscreen_pass_t result = {
         .pass_action = sokol_clear_action(background_color, true, true),
         .pass = sg_make_pass(&(sg_pass_desc){
             .color_attachments[0].image = color_target,
@@ -144,6 +144,9 @@ sokol_offscreen_pass_t sokol_init_depth_pass(
         .color_target = color_target,
         .depth_target = depth_target
     };
+
+    ecs_trace("sokol: depth initialized");
+    return result;
 }
 
 void sokol_update_depth_pass(
@@ -210,12 +213,12 @@ void sokol_run_depth_pass(
     /* Loop geometry, render scene */
     ecs_iter_t qit = ecs_query_iter(state->world, state->q_scene);
     while (ecs_query_next(&qit)) {
-        SokolGeometry *geometry = ecs_field(&qit, SokolGeometry, 1);
+        SokolGeometry *geometry = ecs_field(&qit, SokolGeometry, 0);
 
         int b;
         for (b = 0; b < qit.count; b ++) {
-            depth_draw_instances(&geometry[b], geometry[b].solid);
-            depth_draw_instances(&geometry[b], geometry[b].emissive);
+            depth_draw_instances(&geometry[b], &geometry[b].solid);
+            depth_draw_instances(&geometry[b], &geometry[b].emissive);
         }
     }
 

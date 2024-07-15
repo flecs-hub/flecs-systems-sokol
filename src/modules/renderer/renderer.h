@@ -19,6 +19,9 @@ typedef struct SokolRenderer {
 
     ecs_entity_t canvas;
     ecs_entity_t camera;
+
+    ecs_query_t *lights_query;
+    ecs_vec_t lights;
 } SokolRenderer;
 
 extern ECS_COMPONENT_DECLARE(SokolRenderer);

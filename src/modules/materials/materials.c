@@ -4,24 +4,24 @@ ECS_COMPONENT_DECLARE(SokolMaterialId);
 ECS_COMPONENT_DECLARE(SokolMaterials);
 
 void SokolInitMaterials(ecs_iter_t *it) {
-    const SokolQuery *q = ecs_field(it, SokolQuery, 1);
-    SokolMaterials *materials = ecs_field(it, SokolMaterials, 2);
+    const SokolQuery *q = ecs_field(it, SokolQuery, 0);
+    SokolMaterials *materials = ecs_field(it, SokolMaterials, 1);
 
     materials->changed = true;
     materials->array[0].specular_power = 0.0;
     materials->array[0].shininess = 1.0;
     materials->array[0].emissive = 0.0;
 
-    if (!ecs_query_changed(q->query, 0)) {
+    if (!ecs_query_changed(q->query)) {
         materials->changed = false;
         return;
     }
 
     ecs_iter_t qit = ecs_query_iter(it->world, q->query);
     while (ecs_query_next(&qit)) {
-        SokolMaterialId *mat = ecs_field(&qit, SokolMaterialId, 1);
-        EcsSpecular *spec = ecs_field(&qit, EcsSpecular, 2);
-        EcsEmissive *em = ecs_field(&qit, EcsEmissive, 3);
+        SokolMaterialId *mat = ecs_field(&qit, SokolMaterialId, 0);
+        EcsSpecular *spec = ecs_field(&qit, EcsSpecular, 1);
+        EcsEmissive *em = ecs_field(&qit, EcsEmissive, 2);
 
         int i;
         if (spec) {
@@ -73,12 +73,14 @@ void FlecsSystemsSokolMaterialsImport(
     ECS_MODULE(world, FlecsSystemsSokolMaterials);
 
     /* Store components in parent sokol scope */
-    ecs_entity_t parent = ecs_lookup_fullpath(world, "flecs.systems.sokol");
+    ecs_entity_t parent = ecs_lookup(world, "flecs.systems.sokol");
     ecs_entity_t module = ecs_set_scope(world, parent);
     ecs_set_name_prefix(world, "Sokol");
 
     ECS_COMPONENT_DEFINE(world, SokolMaterialId);
     ECS_COMPONENT_DEFINE(world, SokolMaterials);
+
+    ecs_add_pair(world, ecs_id(SokolMaterialId), EcsOnInstantiate, EcsInherit);
 
     /* Register systems in module scope */
     ecs_set_scope(world, module);
@@ -92,17 +94,23 @@ void FlecsSystemsSokolMaterialsImport(
 
     /* System that initializes material array that's sent to vertex shader */
     ECS_SYSTEM(world, SokolInitMaterials, EcsOnLoad,
-        [in]   sokol.Query(InitMaterials, SokolMaterials),
-        [out]  SokolMaterials);
+        [in]   sokol.Query(InitMaterials, Materials),
+        [out]  Materials);
 
     /* Set material query for InitMaterials system */
     ecs_set_pair(world, SokolInitMaterials, SokolQuery, ecs_id(SokolMaterials),{
-        ecs_query_new(world, material_query)
+        ecs_query(world, { 
+            .entity = ecs_entity(world, {
+                .name = "#0.flecs.systems.sokol.materials.query"
+            }),
+            .expr = material_query,
+            .cache_kind = EcsQueryCacheAuto
+        })
     });
 
     /* Assigns material id to entities with material properties */
     ECS_SYSTEM(world, SokolRegisterMaterial, EcsPostLoad,
-        [out] !flecs.systems.sokol.MaterialId,
+        [out] !flecs.systems.sokol.MaterialId(self),
         [in]   flecs.components.graphics.Specular(self) || 
                flecs.components.graphics.Emissive(self),
                ?Prefab);
