@@ -163,6 +163,28 @@ void mouse_up(
     mouse->current = false;
 }
 
+static void mouse_move(
+    ecs_mouse_state_t *mouse,
+    float x,
+    float y,
+    float dx,
+    float dy)
+{
+    mouse->wnd.x = x;
+    mouse->wnd.y = y;
+    mouse->rel.x = dx;
+    mouse->rel.y = dy;
+}
+
+static void mouse_scroll(
+    ecs_mouse_coord_t *scroll,
+    float x,
+    float y)
+{
+    scroll->x = x;
+    scroll->y = y;
+}
+
 static
 void mouse_button_reset(
     ecs_key_state_t *mouse)
@@ -176,11 +198,23 @@ void mouse_button_reset(
 }
 
 static
+void mouse_scroll_reset(
+    ecs_mouse_coord_t *scroll)
+{
+    scroll->x = 0;
+    scroll->y = 0;
+}
+
+static
 void mouse_reset(
     EcsInput *input)
 {
     mouse_button_reset(&input->mouse.left);
     mouse_button_reset(&input->mouse.right);
+    mouse_scroll_reset(&input->mouse.scroll);
+
+    input->mouse.rel.x = 0;
+    input->mouse.rel.y = 0;
 }
 
 static
@@ -218,6 +252,10 @@ void sokol_input_action(const sapp_event* evt, sokol_app_ctx_t *ctx) {
             mouse_up(&input->mouse.right);
         break;
     case SAPP_EVENTTYPE_MOUSE_SCROLL:
+        mouse_scroll(&input->mouse.scroll, evt->scroll_x, evt->scroll_y);
+        break;
+    case SAPP_EVENTTYPE_MOUSE_MOVE:
+        mouse_move(&input->mouse, evt->mouse_x, evt->mouse_y, evt->mouse_dx, evt->mouse_dy);
         break;
     case SAPP_EVENTTYPE_KEY_UP:
         key_up(key_get(input, key_code(evt->key_code)));
