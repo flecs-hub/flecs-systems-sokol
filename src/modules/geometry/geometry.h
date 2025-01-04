@@ -3,7 +3,6 @@
 
 #include "../../types.h"
 #include "../renderer/renderer.h"
-#include "../materials/materials.h"
 
 typedef void (*sokol_geometry_action_t)(
     mat4 *transforms,
@@ -51,8 +50,14 @@ typedef struct SokolGeometryQuery {
     ecs_entity_t component;
     ecs_query_t *parent_query;
     ecs_query_t *solid;
-    ecs_query_t *emissive;
 } SokolGeometryQuery;
+
+/* Element with material parameters */
+typedef struct {
+    float specular_power;
+    float shininess;
+    float emissive;
+} SokolMaterial;
 
 extern ECS_COMPONENT_DECLARE(SokolGeometry);
 extern ECS_COMPONENT_DECLARE(SokolGeometryQuery);

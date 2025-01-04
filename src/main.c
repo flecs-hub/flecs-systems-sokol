@@ -308,7 +308,6 @@ void FlecsSystemsSokolImport(
     ECS_IMPORT(world, FlecsComponentsGui);
     ECS_IMPORT(world, FlecsComponentsInput);
 
-    ECS_IMPORT(world, FlecsSystemsSokolMaterials);
     ECS_IMPORT(world, FlecsSystemsSokolRenderer);
     ECS_IMPORT(world, FlecsSystemsSokolGeometry);
 

@@ -3,7 +3,6 @@
 #define FLECS_SYSTEMS_SOKOL_PRIVATE_API
 
 #include "types.h"
-#include "modules/materials/materials.h"
 #include "modules/renderer/renderer.h"
 #include "modules/geometry/geometry.h"
 

@@ -421,6 +421,17 @@ void SokolRender(ecs_iter_t *it) {
     if (canvas->camera) {
         state.camera = ecs_get(world, canvas->camera, EcsCamera);
         r->camera = canvas->camera;
+
+        float camera_y_offset = state.camera->position[1] - state.uniforms.shadow_far / 2;
+        if (camera_y_offset < 0) {
+            camera_y_offset = 0;
+        }
+
+        /* Increase shadow distance with camera height */
+        state.uniforms.shadow_far = glm_max(
+            state.uniforms.shadow_far, pow(camera_y_offset, 1.4));
+        state.uniforms.shadow_far = glm_min(state.uniforms.shadow_far,
+            state.camera->far_);
     }
 
     /* Get atmosphere settings */
@@ -488,6 +499,8 @@ void SokolRender(ecs_iter_t *it) {
     /* HDR */
     sokol_fx_run(&fx->hdr, 1, (sg_image[]){ scene_with_fog },
         &state, &r->screen_pass);
+
+    // sokol_run_screen_pass(&r->screen_pass, r, &state, hdr);
 }
 
 static
@@ -554,8 +567,6 @@ void SokolInitRenderer(ecs_iter_t *it) {
 
     ecs_trace("sokol: canvas initialized");
 
-    ecs_set(world, SokolRendererInst, SokolMaterials, { true });
-
     ecs_set_pair(world, SokolRendererInst, SokolQuery, ecs_id(SokolGeometry), {
         ecs_query(world, { .expr = "[in] flecs.systems.sokol.Geometry" })
     });
@@ -577,7 +588,6 @@ void FlecsSystemsSokolRendererImport(
     ecs_world_t *world)
 {
     ECS_MODULE(world, FlecsSystemsSokolRenderer);
-    ECS_IMPORT(world, FlecsSystemsSokolMaterials);
     ECS_IMPORT(world, FlecsSystemsSokolGeometry);
 
     /* Create components in parent scope */

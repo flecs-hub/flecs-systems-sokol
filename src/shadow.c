@@ -145,7 +145,6 @@ void sokol_run_shadow_pass(
         
         int b;
         for (b = 0; b < qit.count; b ++) {
-            /* Only draw solids, ignore emissive and transparent (for now) */
             shadow_draw_instances(&geometry[b], &geometry[b].solid);
         }
     }
