@@ -165,7 +165,7 @@ void sokol_init_light_mat_vp(
     float n = -max[2];
     float f = -min[2];
 
-    // // Discretize coordinates
+    // Discretize coordinates
     const float step_size = 16;
     l = floor(l / step_size) * step_size;
     r = ceil(r / step_size) * step_size;
@@ -333,8 +333,7 @@ void sokol_gather_lights(ecs_world_t *world, SokolRenderer *r, sokol_render_stat
     ecs_iter_t it = ecs_query_iter(world, r->lights_query);
     while (ecs_query_next(&it)) {
         EcsPointLight *l = ecs_field(&it, EcsPointLight, 0);
-        EcsPosition3 *p = ecs_field(&it, EcsPosition3, 1);
-        EcsTransform3 *m = ecs_field(&it, EcsTransform3, 2);
+        EcsTransform3 *m = ecs_field(&it, EcsTransform3, 1);
 
         for (int i = 0; i < it.count; i ++) {
             sokol_light_t *light = ecs_vec_append_t(
@@ -460,7 +459,7 @@ void SokolRender(ecs_iter_t *it) {
     sokol_init_global_uniforms(&state);
 
     /* Collect lights for scene */
-    sokol_gather_lights(world, r, &state);
+    // sokol_gather_lights(world, r, &state);
 
     /* Compute shadow parameters and run shadow pass */
     if (canvas->directional_light) {
@@ -547,9 +546,9 @@ void SokolInitRenderer(ecs_iter_t *it) {
     ecs_query_t *lights_query = ecs_query(world, {
         .terms = {
             { ecs_id(EcsPointLight) },
-            { ecs_id(EcsPosition3) },
             { ecs_id(EcsTransform3) }
         },
+        .cache_kind = EcsQueryCacheAuto
     });
 
     ecs_set(world, SokolRendererInst, SokolRenderer, {
@@ -573,6 +572,9 @@ void SokolInitRenderer(ecs_iter_t *it) {
 
     sokol_init_geometry(world, &resources);
     ecs_trace("sokol: static geometry resources initialized");
+
+    /* Run once */
+    ecs_enable(it->world, it->system, false);
 
     ecs_log_pop();
 }

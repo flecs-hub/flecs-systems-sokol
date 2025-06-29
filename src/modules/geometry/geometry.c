@@ -174,7 +174,7 @@ void sokol_populate_buffers(
         EcsRgb *colors = ecs_field(&qit, EcsRgb, 1);
         EcsEmissive *emissive = ecs_field(&qit, EcsEmissive, 2);
         EcsSpecular *specular = ecs_field(&qit, EcsSpecular, 3);
-        void *geometry_data = ecs_field_w_size(&qit, 0, 4);
+        void *geometry_data = ecs_field_w_size(&qit, qit.sizes[4], 4);
         bool geometry_self = ecs_field_is_self(&qit, 4);
 
         int32_t cur = ecs_vec_count(&buffers->colors_data);
@@ -323,10 +323,6 @@ void CreateGeometryQueries(ecs_iter_t *it) {
             }, {
                 .id        = gq[i].component, 
                 .inout     = EcsIn
-            }, {
-                .id        = ecs_id(EcsPosition3),
-                .src.id    = EcsSelf,
-                .inout     = EcsInOutNone,
             }},
             .cache_kind = EcsQueryCacheAuto
         };

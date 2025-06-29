@@ -374,11 +374,6 @@ void sokol_run_scene_pass(
     /* Render to offscreen texture so screen-space effects can be applied */
     sg_begin_pass(pass->pass, &pass->pass_action);
 
-    /* Step 1: render atmosphere background */
-    sg_apply_pipeline(pass->pip_2);
-    sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &(sg_range){&fs_sun_atmos_u, sizeof(scene_fs_sun_atmos_uniforms_t)});
-    scene_draw_atmos(state);
-
     /* Step 2: render scene */
     sg_apply_pipeline(pass->pip);
     sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &(sg_range){&vs_u, sizeof(scene_vs_uniforms_t)});
@@ -396,6 +391,12 @@ void sokol_run_scene_pass(
             scene_draw_instances(&geometry[b], &geometry[b].emissive, state->shadow_map);
         }
     }
+
+    /* Step 1: render atmosphere background */
+    sg_apply_pipeline(pass->pip_2);
+    sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &(sg_range){&fs_sun_atmos_u, sizeof(scene_fs_sun_atmos_uniforms_t)});
+    scene_draw_atmos(state);
+
     sg_end_pass();
 }
 

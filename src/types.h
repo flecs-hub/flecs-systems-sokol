@@ -55,6 +55,7 @@ typedef struct sokol_global_uniforms_t {
 
     vec3 sun_direction;
     vec3 sun_color;
+    vec3 night_color;
     vec3 sun_screen_pos;
     float sun_intensity;
 

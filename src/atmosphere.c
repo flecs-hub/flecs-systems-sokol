@@ -111,9 +111,10 @@ void sokol_run_atmos_pass(
     glm_mat4_copy(state->uniforms.inv_mat_v, fs_u.inv_mat_vp);
     glm_vec3_copy(state->uniforms.eye_pos, fs_u.eye_pos);
     glm_vec3_copy(state->uniforms.sun_direction, fs_u.light_pos);
-    fs_u.night_color[0] = 0.001 / 8.0;
-    fs_u.night_color[1] = 0.008 / 8.0;
-    fs_u.night_color[2] = 0.016 / 8.0;
+    glm_vec3_copy((float*)&state->atmosphere->night_color, fs_u.night_color);
+    // fs_u.night_color[0] = 0.001 / 8.0;
+    // fs_u.night_color[1] = 0.008 / 8.0;
+    // fs_u.night_color[2] = 0.016 / 8.0;
     fs_u.aspect = state->uniforms.aspect;
     fs_u.offset = 0.05;
 
@@ -135,7 +136,6 @@ void sokol_run_atmos_pass(
     sg_bindings bind = { .vertex_buffers = { state->resources->quad } };
     sg_apply_bindings(&bind);
     sg_draw(0, 6, 1);
-    sg_end_pass();
 
     sg_end_pass();
 }

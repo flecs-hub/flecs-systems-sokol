@@ -29125,7 +29125,7 @@ SOKOL_API_IMPL sg_context_desc sapp_sgcontext(void) {
 #define SOKOL_MAX_FX_OUTPUTS (8)
 #define SOKOL_MAX_FX_PASS (8)
 #define SOKOL_MAX_FX_PARAMS (32)
-#define SOKOL_SHADOW_MAP_SIZE (8192 * 2)
+#define SOKOL_SHADOW_MAP_SIZE (1024 * 8)
 #define SOKOL_DEFAULT_DEPTH_NEAR (2.0)
 #define SOKOL_DEFAULT_DEPTH_FAR (2500.0)
 #define SOKOL_MAX_LIGHTS (32)
@@ -29171,6 +29171,7 @@ typedef struct sokol_global_uniforms_t {
 
     vec3 sun_direction;
     vec3 sun_color;
+    vec3 night_color;
     vec3 sun_screen_pos;
     float sun_intensity;
 
@@ -30128,9 +30129,10 @@ void sokol_run_atmos_pass(
     glm_mat4_copy(state->uniforms.inv_mat_v, fs_u.inv_mat_vp);
     glm_vec3_copy(state->uniforms.eye_pos, fs_u.eye_pos);
     glm_vec3_copy(state->uniforms.sun_direction, fs_u.light_pos);
-    fs_u.night_color[0] = 0.001 / 8.0;
-    fs_u.night_color[1] = 0.008 / 8.0;
-    fs_u.night_color[2] = 0.016 / 8.0;
+    glm_vec3_copy((float*)&state->atmosphere->night_color, fs_u.night_color);
+    // fs_u.night_color[0] = 0.001 / 8.0;
+    // fs_u.night_color[1] = 0.008 / 8.0;
+    // fs_u.night_color[2] = 0.016 / 8.0;
     fs_u.aspect = state->uniforms.aspect;
     fs_u.offset = 0.05;
 
@@ -30152,7 +30154,6 @@ void sokol_run_atmos_pass(
     sg_bindings bind = { .vertex_buffers = { state->resources->quad } };
     sg_apply_bindings(&bind);
     sg_draw(0, 6, 1);
-    sg_end_pass();
 
     sg_end_pass();
 }
@@ -31588,11 +31589,6 @@ void sokol_run_scene_pass(
     /* Render to offscreen texture so screen-space effects can be applied */
     sg_begin_pass(pass->pass, &pass->pass_action);
 
-    /* Step 1: render atmosphere background */
-    sg_apply_pipeline(pass->pip_2);
-    sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &(sg_range){&fs_sun_atmos_u, sizeof(scene_fs_sun_atmos_uniforms_t)});
-    scene_draw_atmos(state);
-
     /* Step 2: render scene */
     sg_apply_pipeline(pass->pip);
     sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &(sg_range){&vs_u, sizeof(scene_vs_uniforms_t)});
@@ -31610,6 +31606,12 @@ void sokol_run_scene_pass(
             scene_draw_instances(&geometry[b], &geometry[b].emissive, state->shadow_map);
         }
     }
+
+    /* Step 1: render atmosphere background */
+    sg_apply_pipeline(pass->pip_2);
+    sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &(sg_range){&fs_sun_atmos_u, sizeof(scene_fs_sun_atmos_uniforms_t)});
+    scene_draw_atmos(state);
+
     sg_end_pass();
 }
 
@@ -32435,7 +32437,7 @@ void sokol_populate_buffers(
         EcsRgb *colors = ecs_field(&qit, EcsRgb, 1);
         EcsEmissive *emissive = ecs_field(&qit, EcsEmissive, 2);
         EcsSpecular *specular = ecs_field(&qit, EcsSpecular, 3);
-        void *geometry_data = ecs_field_w_size(&qit, 0, 4);
+        void *geometry_data = ecs_field_w_size(&qit, qit.sizes[4], 4);
         bool geometry_self = ecs_field_is_self(&qit, 4);
 
         int32_t cur = ecs_vec_count(&buffers->colors_data);
@@ -32584,10 +32586,6 @@ void CreateGeometryQueries(ecs_iter_t *it) {
             }, {
                 .id        = gq[i].component, 
                 .inout     = EcsIn
-            }, {
-                .id        = ecs_id(EcsPosition3),
-                .src.id    = EcsSelf,
-                .inout     = EcsInOutNone,
             }},
             .cache_kind = EcsQueryCacheAuto
         };
@@ -32822,7 +32820,7 @@ void sokol_init_light_mat_vp(
     float n = -max[2];
     float f = -min[2];
 
-    // // Discretize coordinates
+    // Discretize coordinates
     const float step_size = 16;
     l = floor(l / step_size) * step_size;
     r = ceil(r / step_size) * step_size;
@@ -32990,8 +32988,7 @@ void sokol_gather_lights(ecs_world_t *world, SokolRenderer *r, sokol_render_stat
     ecs_iter_t it = ecs_query_iter(world, r->lights_query);
     while (ecs_query_next(&it)) {
         EcsPointLight *l = ecs_field(&it, EcsPointLight, 0);
-        EcsPosition3 *p = ecs_field(&it, EcsPosition3, 1);
-        EcsTransform3 *m = ecs_field(&it, EcsTransform3, 2);
+        EcsTransform3 *m = ecs_field(&it, EcsTransform3, 1);
 
         for (int i = 0; i < it.count; i ++) {
             sokol_light_t *light = ecs_vec_append_t(
@@ -33117,7 +33114,7 @@ void SokolRender(ecs_iter_t *it) {
     sokol_init_global_uniforms(&state);
 
     /* Collect lights for scene */
-    sokol_gather_lights(world, r, &state);
+    // sokol_gather_lights(world, r, &state);
 
     /* Compute shadow parameters and run shadow pass */
     if (canvas->directional_light) {
@@ -33156,6 +33153,8 @@ void SokolRender(ecs_iter_t *it) {
     /* HDR */
     sokol_fx_run(&fx->hdr, 1, (sg_image[]){ scene_with_fog },
         &state, &r->screen_pass);
+
+    // sokol_run_screen_pass(&r->screen_pass, r, &state, hdr);
 }
 
 static
@@ -33202,9 +33201,9 @@ void SokolInitRenderer(ecs_iter_t *it) {
     ecs_query_t *lights_query = ecs_query(world, {
         .terms = {
             { ecs_id(EcsPointLight) },
-            { ecs_id(EcsPosition3) },
             { ecs_id(EcsTransform3) }
         },
+        .cache_kind = EcsQueryCacheAuto
     });
 
     ecs_set(world, SokolRendererInst, SokolRenderer, {
@@ -33228,6 +33227,9 @@ void SokolInitRenderer(ecs_iter_t *it) {
 
     sokol_init_geometry(world, &resources);
     ecs_trace("sokol: static geometry resources initialized");
+
+    /* Run once */
+    ecs_enable(it->world, it->system, false);
 
     ecs_log_pop();
 }
